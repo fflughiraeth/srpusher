@@ -1,0 +1,5 @@
+redis
+python-dateutil
+python-pushover
+PyYAML
+rich.logging
