@@ -157,7 +157,7 @@ class SRPusher(Config):
     def srpprint(self, users: list) -> None:
         """ sr pprint for debug """
         for userid in users:
-            logging.info(userid + " " + self.get_user_cache(userid).get("nickname"))
+            logging.info(userid + " " + (self.get_user_cache(userid).get("nickname") if dict(self.get_user_cache(userid)) else ''))
 
 
     def check_notify_duplicated(self, keyword: str) -> bool:
