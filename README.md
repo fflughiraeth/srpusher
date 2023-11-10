@@ -28,7 +28,7 @@ You can receive notify with your PushOver when *someone* (as you like) has been 
 
 2. `Redis`: Install Redis or prepare *ElastiCache* etc if you have not already used.
 
-    1. If a Redis is already running, MAKE SURE and make change if needed `database number` so that the db number DON'T CONFLICT with other application. By default db number is 3. Since these data that this program use are small and volatile in time, memory size is not a concern (maybe less than 1M or 2MB).
+    1. If a Redis is already running, MAKE SURE and make change if needed `database number` so that the db number DON'T CONFLICT with other application. By default db number is `3`. Since these data that this program use are small and volatile in time, memory size is not a concern (maybe less than 1M or 2MB).
 
 3. Copy configration file from skeleton file, `settings.yml.skel` to `settings.yml` , Edit `settings.yml`.
 
@@ -36,14 +36,14 @@ You can receive notify with your PushOver when *someone* (as you like) has been 
 
          - `pushover: user_key` (string)
          - `pushover: api_token` (string)
-           - Pushover Stuff that you want to receive notification. You may get/create from https://pushover.net/apps/build (needs logged in to PushOver).  the application-dependent key is *api_token*, your account's only common key is *user_key* on PushOver. these two are easily confused.
+           - Pushover stuff that you want to receive notification. You may get/create from https://pushover.net/apps/build (needs logged in to PushOver).  the application-dependent key is *api_token*, your account's only common key is *user_key* on PushOver. these two are easily confused.
         - SR stuff,
           - `sr:targets`(string[])
-            - List the UIDs of the **users** you want to pin and receive notifications. The 36 random characters, including `-` at the end of URL of a user's profile page.
+            - List the UIDs of the **users** you want to pin and receive notifications. UID, The 36 random characters, including `-` at the end of URL of a user's profile page.
           - `sr: targets_exclude` (string[])
-            - also UIDs to be excluded are possible. This does not make sense on its own, yet it may work in the keywords section below.
+            - also UIDs to be excluded. This does not make sense on its own, yet it may work in the keywords section below.
           - `sr: target_keywords` (string[])
-            - Notify if these keywords in in the roomname, room description and username. Once matched, the target will not be notified again for 1 hour. or else, those will be notified over and over again while the same keyword are present.
+            - Notify if these keywords in the roomname, room description and username. Once matched, the target will not be notified again for 1 hour. or else, those will be notified over and over again while the same keyword are present.
           - `sr: target_keywords_exclude` (string[])
             - excluded keywords list.
         - Redis configuration(if needed)
@@ -65,16 +65,16 @@ You can receive notify with your PushOver when *someone* (as you like) has been 
 1. **Foreground**; it continues to fetch and run all the time by itself ;  Not daemonized but it continues to run *foreground* until you stop it by Ctrl-c.
 2. **Run once** and terminate, no scheduling. To run periodically, it would require something (like *cron*) .
 
-No matter either way. Don't run two or more at the same time. When using *Run once*, make sure to run at a *sensible interval* (120 seconds or more), and add some *jitter* to the run interval if possible. now that, user's information cache expires 1 hour by default, if executed at intervals more than 1 hour, may missing user's information will occur.
+No matter either way. Don't run two or more at the same time. When using *Run once*, make sure to run at a *sensible interval* (120 seconds or more), and add some *jitter* to the run interval if possible. now that, user's information cache expires 1 hour by default, if it executed at intervals more than 1 hour, may missing user's information will occur.
 
 ### Foreground mode
 1. to run: just type `make run`
     ```sh
-    $ make
+    $ make run
     ...
     ```
 
-    (optional) if you don't want use make,
+    (optional) if you don't want to use make,
 
     ```sh
     $ source venv/bin/activate
@@ -114,7 +114,7 @@ how it works
 1. Fetch information on the room list of SR. This includes the room list and users in that room.
 1. Save the online users list to Redis. This list is compared with the list that retrieved last time, and those who were online last time but don't exist this time, are assumed to be offlin-ed users. The online user list is stored on a *Set* of Redis, *sdiff* is used for difference detection.
 1. If any of the users who went online this time *you  pinned*, the room and users information will be notified via PushOver.
-1. In foreground mode, it after waiting, then returns to the begeninning. In Run Once, exits immediately.
+1. In foreground mode, it after waiting, then returns to the begeninning. In *Run once*, it exits immediately.
 
 
 ## uninstall
