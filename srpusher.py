@@ -222,7 +222,6 @@ class SRPusher(Config):
 
         # pass 2
         new_rooms_text = {}
-        new_rooms = {}
         for room in content["rooms"]:
             is_new_room = False
             roomname = room.get("roomName")
@@ -234,6 +233,7 @@ class SRPusher(Config):
             if self.check_keyword(roomname, roomdesc):
                 is_new_room = True
                 logging.debug("keyword: {} {}".format(roomname, roomdesc))
+            room_members = ""
             for m in room["members"]:
                 nickname = m.get("nickname")
                 userid = m.get("userId")
@@ -241,16 +241,22 @@ class SRPusher(Config):
                 if self.check_keyword(nickname):
                     is_new_room = True
                     logging.debug("keyword: {}".format(nickname))
+                if userid in self.settings["sr"]["targets"]:
+                    header = "  + "
+                else:
+                    header = "  - "
+                room_members += f"{header}{nickname}\n"
+
                 if (userid in self.settings["sr"]["targets"] and userid not in self.settings["sr"].get("targets_exclude") and userid in onlined_users) or is_new_room:
-                    members = "  - "
-                    members += "\n  - ".join([x['nickname'] for x in room["members"]])
-                    roomext = ' (protected)' if needPasswd else ''
-                    members_text = 'Room: {}{}\nMembers({}):\n{}\n{}\nElapsed: {}\n\n'.format(roomname, roomext, numMembers, members, roomdesc, (nowtime - createTime))
-                    new_rooms_text[roomid] = members_text
-                    new_rooms[roomid] = room
+                    # room_members = "  - "
+                    # room_members += "\n  - ".join([x['nickname'] for x in room["members"]])
+                    room_members_text = {}
+                    room_members_text['room'] = '{}{}'.format(roomname, ' (protected)' if needPasswd else '')
+                    room_members_text['detail'] = 'Members({}):\n{}\n{}\nElapsed: {}\n\n'.format(numMembers, room_members, roomdesc, (nowtime - createTime))
+                    new_rooms_text[roomid] = room_members_text
         for k, v in new_rooms_text.items():
-            logging.info(v)
-            self.send_notification(v, title=new_rooms[k].get("roomName"))
+            logging.info(v['room'] + "\n" + v['detail'])
+            self.send_notification(v['detail'], title=v['room'])
 
 
     def run(self, runonce=False) -> None:
