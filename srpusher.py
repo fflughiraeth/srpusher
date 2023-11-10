@@ -278,7 +278,7 @@ if __name__ == '__main__':
     parser.add_argument('--debug', '-v', action='store_true', help='show more logs')
     args = parser.parse_args().__dict__
 
-    if args.get('silent'):
+    if args.get('quiet'):
         loglevel = logging.ERROR
     if args.get('debug'):
         loglevel = logging.DEBUG
