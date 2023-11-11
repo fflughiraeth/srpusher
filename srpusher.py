@@ -241,10 +241,12 @@ class SRPusher(Config):
                 if self.check_keyword(nickname):
                     is_new_room = True
                     logging.debug("keyword: {}".format(nickname))
-                if userid in self.settings["sr"]["targets"]:
-                    header = "  + "
+                if userid in list(onlined_users) and userid in self.settings["sr"]["targets"]:
+                    header = "  + "  # online-ed now
+                elif userid in self.settings["sr"]["targets"]:
+                    header = "  * "  # pinned
                 else:
-                    header = "  - "
+                    header = "  - "  # normal
                 room_members += f"{header}{nickname}\n"
 
                 if (userid in self.settings["sr"]["targets"] and userid not in self.settings["sr"].get("targets_exclude") and userid in onlined_users) or is_new_room:
