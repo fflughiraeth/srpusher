@@ -1,6 +1,5 @@
 global:
     verbose: True
-    continue_with_ignore_exception: False
 
 sr:
     api_url: 'uggcf://jroncv.flapebbz.nccfreivpr.lnznun.pbz/pbzz/choyvp/ebbz_yvfg?cntrfvmr=500&ernyz=4'  # rot13ed. if necessary rewrite URL with normal format(https://...)
@@ -16,13 +15,11 @@ sr:
         - 'notify if this keyword is in roomname, room description, username.'
     target_keywords_exclude:
         null  # if hits this, NOT notify even if target_keywords has hit. if you dont need this, leave null
-    target_keywords_duplicate_suppless_sec: 3600
 
 pushover:
     # these are dummy key, replace yours.
     user_key: "pTux2ByyINrgfApe7MEQBMSQVm2c2f"
     api_token: "2jc2oJ2fJXC2287RxgRoRP2oinRPLz"
-    message_ttl_sec: 0  # never
     message_priority: 0
 
 redis:
