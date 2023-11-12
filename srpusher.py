@@ -36,7 +36,7 @@ class Config(object):
 class SRPusher(Config):
     redis = None
     pushover = None
-    debug = True
+    debug = False
     header_channel = "__channel__"
     header_usercache = "__usercache__"
     header_keyword = "__keyword__"
@@ -47,19 +47,21 @@ class SRPusher(Config):
     _previous_sr_status = None
 
     def __init__(self, dry_run=False) -> None:
+        if 'debug' in self.settings['global'] and self.settings['global'].get('debug') is True:
+            self.debug = True
         if dry_run:
             self.redis = redis.Redis(
                 host=self.settings['redis']['host'],
                 port=self.settings['redis']['port'],
                 db=10,
-                charset="utf-8", decode_responses=True,
+                encoding="utf-8", decode_responses=True,
             )
         else:
             self.redis = redis.Redis(
                 host=self.settings['redis']['host'],
                 port=self.settings['redis']['port'],
                 db=self.settings['redis']['db'],
-                charset="utf-8", decode_responses=True,
+                encoding="utf-8", decode_responses=True,
             )
         # if you don't want send something via pushover, just remove `pushover` from settings.yml
         if self.settings['pushover']:
@@ -102,7 +104,6 @@ class SRPusher(Config):
         if not message:
             return False
         logging.info(f"(Send PushOver) {title}: {message}")
-        # if self.pushover.message_status() != pushover.PUSHOVER_MESSAGE_STATUS_OK:
         return self.pushover.send_message(message, title=title)
 
 
@@ -250,15 +251,13 @@ class SRPusher(Config):
                 room_members += f"{header}{nickname}\n"
 
                 if (userid in self.settings["sr"]["targets"] and userid not in self.settings["sr"].get("targets_exclude") and userid in onlined_users) or is_new_room:
-                    # room_members = "  - "
-                    # room_members += "\n  - ".join([x['nickname'] for x in room["members"]])
                     room_members_text = {}
                     room_members_text['room'] = '{}{}'.format(roomname, ' (protected)' if needPasswd else '')
                     room_members_text['detail'] = 'Members({}):\n{}\n{}\nElapsed: {}\n\n'.format(numMembers, room_members, roomdesc, (nowtime - createTime))
                     new_rooms_text[roomid] = room_members_text
         for k, v in new_rooms_text.items():
-            logging.info(v['room'] + "\n" + v['detail'])
-            self.send_notification(v['detail'], title=v['room'])
+            result = self.send_notification(v['detail'], title=v['room'])
+            logging.info(str(result))
 
 
     def run(self, runonce=False) -> None:
