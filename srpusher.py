@@ -155,10 +155,10 @@ class SRPusher(Config):
         return hashlib.sha256((str(createTime) + roomName).encode('utf-8')).hexdigest()
 
 
-    def srpprint(self, users: list) -> None:
+    def srpprint(self, users: list, style: str = '') -> None:
         """ sr pprint for debug """
         for userid in users:
-            logging.info(userid + " " + (self.get_user_cache(userid).get("nickname") if dict(self.get_user_cache(userid)) else ''))
+            logging.info(userid + f" [{style}]" + (self.get_user_cache(userid).get("nickname") if dict(self.get_user_cache(userid)) else '') + "[/]", extra={"markup": True})
 
 
     def check_notify_duplicated(self, keyword: str) -> bool:
@@ -213,11 +213,11 @@ class SRPusher(Config):
         offlined_users = self.get_users_diff(self.key_members_previous, self.key_members)
         onlined_users = self.get_users_diff(self.key_members, self.key_members_previous)
         if len(onlined_users):
-            logging.info("--- onlined")
-            self.srpprint(onlined_users)
+            logging.info("[bold]--- onlined[/]", extra={"markup": True})
+            self.srpprint(onlined_users, style="bold white")
         if len(offlined_users):
-            logging.info("--- offlined")
-            self.srpprint(offlined_users)
+            logging.info("[grey]--- offlined[/]", extra={"markup": True})
+            self.srpprint(offlined_users, style="grey")
         # flush previous list with current list
         self.flush_users_status(self.key_members, self.key_members_previous)
 
@@ -276,7 +276,7 @@ if __name__ == '__main__':
     loglevel = logging.INFO
 
     stream_handler: rich.logging.RichHandler = rich.logging.RichHandler(rich_tracebacks=True)
-    stream_handler.setFormatter(logging.Formatter('%(levelname)s %(message)s'))
+    stream_handler.setFormatter(logging.Formatter('%(message)s'))
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--runonce', '-1', action='store_true', help='run once and exit')
