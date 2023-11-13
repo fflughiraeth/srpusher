@@ -174,6 +174,7 @@ class SRPusher(Config):
 
 
     def check_keyword(self, *args: str) -> bool:
+        """ Check if keywords is in args or not, and if keywords already has been in recently """
         keywords = self.settings["sr"].get("target_keywords") or []
         keywords_negative = self.settings["sr"].get("target_keywords_exclude") or []
         for arg in args:
@@ -188,18 +189,7 @@ class SRPusher(Config):
         """ Check SR status and send notification if needed """
         nowtime = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
         content = self.sr_status
-        """
-          memo
-            room[]:
-              - roomName
-              - roomDesc
-              - numMembers
-              - createTime
-              - members[]:
-                  - nickname
-                  - userId
-                  - nsgmMemberId
-        """
+
         # pass 1
         online_members = []
         for room in content["rooms"]:
@@ -250,7 +240,7 @@ class SRPusher(Config):
                     header = "  - "  # normal
                 room_members += f"{header}{nickname}\n"
 
-                if (userid in self.settings["sr"]["targets"] and userid not in self.settings["sr"].get("targets_exclude") and userid in onlined_users) or is_new_room:
+                if is_new_room or (userid in self.settings["sr"]["targets"] and userid not in self.settings["sr"].get("targets_exclude") and userid in onlined_users):
                     room_members_text = {}
                     room_members_text['room'] = '{}{}'.format(roomname, ' (protected)' if needPasswd else '')
                     room_members_text['detail'] = 'Members({}):\n{}\n{}\nElapsed: {}\n\n'.format(numMembers, room_members, roomdesc, (nowtime - createTime))
