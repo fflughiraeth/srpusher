@@ -46,7 +46,8 @@ class SRPusher(Config):
     _previous_sr_status_epoch = 0
     _previous_sr_status = None
 
-    def __init__(self, dry_run=False) -> None:
+    def __init__(self, dry_run=False, configfilename="settings.yml") -> None:
+        self._filename = configfilename
         if 'debug' in self.settings['global'] and self.settings['global'].get('debug') is True:
             self.debug = True
         if dry_run:
@@ -173,13 +174,16 @@ class SRPusher(Config):
             return False
 
 
-    def check_keyword(self, *args: str) -> bool:
+    def check_keyword(self, *args: str, members: list = []) -> bool:
         """ Check if keywords is in args or not, and if keywords already has been in recently """
         keywords = self.settings["sr"].get("target_keywords") or []
         keywords_negative = self.settings["sr"].get("target_keywords_exclude") or []
+        members_negative = self.settings["sr"].get("targets_exclude") or []
         for arg in args:
             if str(arg) and arg != '' and \
-                    [k for k in keywords if k in arg] and not [k for k in keywords_negative if k in arg]:
+                    [k for k in keywords if k in arg] and \
+                    not [k for k in keywords_negative if k in arg] and \
+                    not [u['userId'] for u in members if u['userId'] in members_negative]:
                 if not self.check_notify_duplicated(arg):
                     return True
         return False
@@ -219,9 +223,10 @@ class SRPusher(Config):
             roomdesc = room.get("roomDesc")
             numMembers = room.get("numMembers")
             needPasswd = room.get("needPasswd")
+            members = room.get("members")
             createTime = dateutil.parser.parse(room.get("createTime"))
             roomid = self.generate_roomid(createTime, roomname)
-            if self.check_keyword(roomname, roomdesc):
+            if self.check_keyword(roomname, roomdesc, members=members):
                 is_new_room = True
                 logging.debug("keyword: {} {}".format(roomname, roomdesc))
             room_members = ""
@@ -229,7 +234,7 @@ class SRPusher(Config):
                 nickname = m.get("nickname")
                 userid = m.get("userId")
                 # memberid = m.get("nsgmMemberId")  # This could be a action ID?
-                if self.check_keyword(nickname):
+                if self.check_keyword(nickname, members=members):
                     is_new_room = True
                     logging.debug("keyword: {}".format(nickname))
                 if userid in list(onlined_users) and userid in self.settings["sr"]["targets"]:
