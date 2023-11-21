@@ -40,6 +40,7 @@ class SRPusher(Config):
     header_channel = "__channel__"
     header_usercache = "__usercache__"
     header_keyword = "__keyword__"
+    header_roomcache = "__roomcache__"
     default_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
     key_members = "members"
     key_members_previous = "members_prev"
@@ -141,6 +142,13 @@ class SRPusher(Config):
         self.redis.expire(key, 60 * 60)  # shorter is ok, at least it should remain until the next fetch.
 
 
+    def set_room_cache(self, roomid: str, room_object: object) -> None:
+        """ Cache room detail in redis """
+        key = self.header_roomcache + roomid
+        self.redis.set(key, json.dumps(room_object))
+        self.redis.expire(key, 60 * 60)
+
+
     def get_user_cache(self, userid: str) -> object:
         """ Get user detail cache from cache redis """
         key = self.header_usercache + userid.lower()
@@ -226,6 +234,7 @@ class SRPusher(Config):
             members = room.get("members")
             createTime = dateutil.parser.parse(room.get("createTime"))
             roomid = self.generate_roomid(createTime, roomname)
+            self.set_room_cache(roomid, room)
             if self.check_keyword(roomname, roomdesc, members=members):
                 is_new_room = True
                 logging.debug("keyword: {} {}".format(roomname, roomdesc))
