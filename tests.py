@@ -120,7 +120,7 @@ eyJyb29tcyI6IFt7InJlYWxtIjogNCwgImluZGV4IjogMSwgInJvb21BdHRyaWJ1dGUiOiB7Imxhbmd1
 
     def reload_test_users_list(self) -> list:
         self.key_members_previous= "_test" + self.s.key_members_previous
-        self.key_members = "_test" + self.s.key_member
+        self.key_members = "_test" + self.s.key_members
         members = []
         members.append(self._sr_status["rooms"][0]["members"][0]["userId"])
         members.append(self._sr_status["rooms"][0]["members"][1]["userId"])
