@@ -18,6 +18,13 @@ import pushover
 import hashlib
 import logging
 import rich.logging
+import importlib
+import pkgutil
+
+discovered_plugins = {
+    name: importlib.import_module(name)
+    for finder, name, ispkg in pkgutil.iter_modules() if name.startswith('srpusher_plugin_')
+}
 
 
 class Config(object):
