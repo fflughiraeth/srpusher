@@ -22,8 +22,6 @@ import importlib
 import pkgutil
 
 
-
-
 class Config(object):
     """ Read configration from a file """
     _filename = "settings.yml"
@@ -251,7 +249,7 @@ class SRPusher(Config):
         for room in content["rooms"]:
             roomname = room.get("roomName")
             createTime = dateutil.parser.parse(room.get("createTime"))
-            nsgmmemberid = room.get("creator").get("nsgmMemberId") or '' # actionid
+            nsgmmemberid = room.get("creator").get("nsgmMemberId") or ''  # actionid
             roomid = self.generate_roomid(createTime, roomname, nsgmmemberid)
             alive_rooms.append(roomid)
             self.set_room_cache(roomid, room)
@@ -288,7 +286,7 @@ class SRPusher(Config):
             needPasswd = room.get("needPasswd")
             members = room.get("members")
             createTime = dateutil.parser.parse(room.get("createTime"))
-            nsgmmemberid = room.get("creator").get("nsgmMemberId") or '' # actionid
+            nsgmmemberid = room.get("creator").get("nsgmMemberId") or ''  # actionid
             roomid = self.generate_roomid(createTime, roomname, nsgmmemberid)
             if self.check_keyword(roomname, roomdesc, members=members):
                 is_new_room = True
@@ -328,7 +326,7 @@ class SRPusher(Config):
             logging.info("[bold]--- Created room: [/]", extra={"markup": True})
             logging.info([self.get_room_cache(r).get("roomName") for r in onlined_rooms])
         if len(offlined_rooms):
-            logging.info("[grey]--- Deleted room: [/]", extra={"markup": True})
+            logging.info("[grey]--- Disappeared room: [/]", extra={"markup": True})
             logging.info([self.get_room_cache(r).get("roomName") for r in offlined_rooms])
         if len(onlined_users):
             logging.info("[bold]--- onlined[/]", extra={"markup": True})
