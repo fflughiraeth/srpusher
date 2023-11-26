@@ -165,7 +165,7 @@ class SRPusher(Config):
         self.redis.expire(key, 60 * 60)
 
     def get_room_cache(self, roomid: str) -> object:
-        """ Get room detail cache from cache redis """
+        """ Get room's detail cache from redis if exists (unreliable) """
         key = self.header_roomcache + roomid
         try:
             roomcache = json.loads(self.redis.get(key))
@@ -174,7 +174,7 @@ class SRPusher(Config):
         return roomcache
 
     def get_user_cache(self, userid: str) -> object:
-        """ Get user detail cache from cache redis """
+        """ Get user's detail cache from redis if exists (unreliable) """
         key = self.header_usercache + userid.lower()
         try:
             usercache = json.loads(self.redis.get(key))
@@ -183,9 +183,12 @@ class SRPusher(Config):
         return usercache
 
 
-    def generate_roomid(self, createTime: str, roomName: str) -> str:
-        """ Generate roomid from timestamp+name """
-        return hashlib.sha256((str(createTime) + roomName).encode('utf-8')).hexdigest()
+    def generate_roomid(self, createTime: str, roomName: str, nsgmmemberid: str) -> str:
+        """ Generate roomid from hash(timestamp+name+actionid) """
+        if (not str(createTime) or not str(roomName) or not str(nsgmmemberid)) or (createTime == '' or roomName == '' or nsgmmemberid == ''):
+            logging.error("generate_roomid: invalid parameters")
+            raise ValueError("generate_roomid: invalid parameters")
+        return hashlib.sha256((str(createTime) + roomName + nsgmmemberid).encode('utf-8')).hexdigest()
 
 
     def get_rooms_diff(self, key1, key2) -> list:
@@ -248,7 +251,8 @@ class SRPusher(Config):
         for room in content["rooms"]:
             roomname = room.get("roomName")
             createTime = dateutil.parser.parse(room.get("createTime"))
-            roomid = self.generate_roomid(createTime, roomname)
+            nsgmmemberid = room.get("creator").get("nsgmMemberId") or '' # actionid
+            roomid = self.generate_roomid(createTime, roomname, nsgmmemberid)
             alive_rooms.append(roomid)
             self.set_room_cache(roomid, room)
             for m in room["members"]:
@@ -263,12 +267,10 @@ class SRPusher(Config):
         # flush previous list with current list
         self.flush_users_status(self.key_members, self.key_members_previous)
 
-        # set current rooms to `current` list`
+        # also
         self.set_rooms_status(self.key_rooms, alive_rooms)
-        # compare current list with `previous` list
         offlined_rooms = self.get_rooms_diff(self.key_rooms_previous, self.key_rooms)
         onlined_rooms = self.get_rooms_diff(self.key_rooms, self.key_rooms_previous)
-        # flush previous list with current list
         self.flush_rooms_status(self.key_rooms, self.key_rooms_previous)
 
         return onlined_users, offlined_users, onlined_rooms, offlined_rooms
@@ -286,7 +288,8 @@ class SRPusher(Config):
             needPasswd = room.get("needPasswd")
             members = room.get("members")
             createTime = dateutil.parser.parse(room.get("createTime"))
-            roomid = self.generate_roomid(createTime, roomname)
+            nsgmmemberid = room.get("creator").get("nsgmMemberId") or '' # actionid
+            roomid = self.generate_roomid(createTime, roomname, nsgmmemberid)
             if self.check_keyword(roomname, roomdesc, members=members):
                 is_new_room = True
                 logging.debug("keyword: {} {}".format(roomname, roomdesc))
