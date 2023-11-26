@@ -21,10 +21,7 @@ import rich.logging
 import importlib
 import pkgutil
 
-discovered_plugins = {
-    name: importlib.import_module(name)
-    for finder, name, ispkg in pkgutil.iter_modules() if name.startswith('srpusher_plugin_')
-}
+
 
 
 class Config(object):
@@ -53,6 +50,7 @@ class SRPusher(Config):
     key_members_previous = "members_prev"
     _previous_sr_status_epoch = 0
     _previous_sr_status = None
+    _plugins = []
 
     def __init__(self, dry_run=False, configfilename="settings.yml") -> None:
         self._filename = configfilename
@@ -78,6 +76,15 @@ class SRPusher(Config):
                 self.settings['pushover']['user_key'],
                 api_token=self.settings['pushover']['api_token'],
             )
+
+
+    def discover_plugins(self) -> None:
+        self._plugins = {
+           name: importlib.import_module(name)
+           for finder, name, ispkg in pkgutil.iter_modules() if name.startswith('srpusher_plugin_')
+        }
+        self._log = self._plugins["srpusher_plugin_logging"].SRPusher_Logger()
+
 
     def disable_pushover(self) -> None:
         self.pushover = None
@@ -294,6 +301,7 @@ if __name__ == '__main__':
     parser.add_argument('--disable_pushover', action='store_true', help='disable pushover')
     parser.add_argument('--quiet', '-s', action='store_true', help="show less logs")
     parser.add_argument('--debug', '-v', action='store_true', help='show more logs')
+    parser.add_argument('--plugins', action='store_true')
     args = parser.parse_args().__dict__
 
     if args.get('quiet'):
@@ -302,6 +310,8 @@ if __name__ == '__main__':
         loglevel = logging.DEBUG
     if 'DEBUG' in os.environ:
         loglevel = logging.DEBUG
+    if args.get('plugins'):
+        sys.exit(0)
 
     stream_handler.setLevel(loglevel)
     logging.basicConfig(level=loglevel, handlers=[stream_handler])
