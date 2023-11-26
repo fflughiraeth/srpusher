@@ -30,7 +30,7 @@ You can receive notify with your PushOver when *someone* (as you like) has been 
 
     1. If a Redis is already running, MAKE SURE and make change if needed `database number` so that the db number DON'T CONFLICT with other application. By default db number is `3`. Since these data that this program use are small and volatile in time, memory size is not a concern (maybe less than 1M or 2MB).
 
-3. Copy configration file from skeleton file, `settings.yml.skel` to `settings.yml` , Edit `settings.yml`.
+3. Copy configration file from skeleton file, `settings.yml.skel` to `settings.yml` , and edit `settings.yml`.
 
     1. Items to be edited:
 
@@ -46,7 +46,7 @@ You can receive notify with your PushOver when *someone* (as you like) has been 
             - Notify if these keywords in the roomname, room description and username. Once matched, the target will not be notified again for 1 hour. or else, those will be notified over and over again while the same keyword are present.
           - `sr: target_keywords_exclude` (string[])
             - excluded keywords list.
-        - Redis configuration(if needed)
+        - Redis configuration if needed, see above 2.
           - `redis: host`
           - `redis: port`
           - `redis: db`
@@ -74,7 +74,7 @@ No matter either way. Don't run two or more at the same time. When using *Run on
     ...
     ```
 
-    (optional) if you don't want to use make,
+    (optional) if you don't want to use make, *activate* venv manually.
 
     ```sh
     $ source venv/bin/activate
