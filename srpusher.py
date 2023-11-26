@@ -48,6 +48,8 @@ class SRPusher(Config):
     default_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
     key_members = "members"
     key_members_previous = "members_prev"
+    key_rooms = "rooms"
+    key_rooms_previous = "rooms_prev"
     _previous_sr_status_epoch = 0
     _previous_sr_status = None
     _plugins = []
@@ -162,6 +164,14 @@ class SRPusher(Config):
         self.redis.set(key, json.dumps(room_object))
         self.redis.expire(key, 60 * 60)
 
+    def get_room_cache(self, roomid: str) -> object:
+        """ Get room detail cache from cache redis """
+        key = self.header_roomcache + roomid
+        try:
+            roomcache = json.loads(self.redis.get(key))
+        except TypeError:
+            roomcache = {}
+        return roomcache
 
     def get_user_cache(self, userid: str) -> object:
         """ Get user detail cache from cache redis """
@@ -177,6 +187,26 @@ class SRPusher(Config):
         """ Generate roomid from timestamp+name """
         return hashlib.sha256((str(createTime) + roomName).encode('utf-8')).hexdigest()
 
+
+    def get_rooms_diff(self, key1, key2) -> list:
+        """ Get offline<=>online of rooms diff from redis """
+        return list(self.redis.sdiff(key1, key2))
+
+    def set_rooms_status(self, key, roomids) -> None:
+        """ Set rooms alive in redis """
+        self.redis.delete(key)
+        for roomid in roomids:
+            if str(roomid) and roomid != '':
+                self.redis.sadd(key, roomid)
+        self.redis.expire(key, 60 * 60 * 24 * 7)
+
+    def flush_rooms_status(self, key_src: str, key_dest: str) -> None:
+        """ Flush rooms alive for next comparing """
+        self.redis.delete(key_dest)
+        self.redis.sinterstore(key_dest, key_src)
+        if not self.debug:
+            self.redis.delete(key_src)
+        self.redis.expire(key_dest, 60 * 60 * 24 * 7)
 
     def srpprint(self, users: list, style: str = '') -> None:
         """ sr pprint for debug """
@@ -218,7 +248,13 @@ class SRPusher(Config):
 
         # pass 1
         online_members = []
+        alive_rooms = []
         for room in content["rooms"]:
+            roomname = room.get("roomName")
+            createTime = dateutil.parser.parse(room.get("createTime"))
+            roomid = self.generate_roomid(createTime, roomname)
+            alive_rooms.append(roomid)
+            self.set_room_cache(roomid, room)
             for m in room["members"]:
                 userid = m.get("userId")
                 online_members.append(userid)
@@ -237,6 +273,21 @@ class SRPusher(Config):
         # flush previous list with current list
         self.flush_users_status(self.key_members, self.key_members_previous)
 
+        # set current rooms to `current` list`
+        self.set_rooms_status(self.key_rooms, alive_rooms)
+        # compare current list with `previous` list
+        offlined_rooms = self.get_rooms_diff(self.key_rooms_previous, self.key_rooms)
+        onlined_rooms = self.get_rooms_diff(self.key_rooms, self.key_rooms_previous)
+        if len(onlined_rooms):
+            logging.info("[bold]Created room: [/]", extra={"markup": True})
+            logging.info([self.get_room_cache(r).get("roomName") for r in onlined_rooms])
+        if len(offlined_rooms):
+            logging.info("[grey]Deleted room: [/]", extra={"markup": True})
+            logging.info([self.get_room_cache(r).get("roomName") for r in offlined_rooms])
+        # flush previous list with current list
+        self.flush_rooms_status(self.key_rooms, self.key_rooms_previous)
+
+
         # pass 2
         new_rooms_text = {}
         for room in content["rooms"]:
@@ -248,7 +299,6 @@ class SRPusher(Config):
             members = room.get("members")
             createTime = dateutil.parser.parse(room.get("createTime"))
             roomid = self.generate_roomid(createTime, roomname)
-            self.set_room_cache(roomid, room)
             if self.check_keyword(roomname, roomdesc, members=members):
                 is_new_room = True
                 logging.debug("keyword: {} {}".format(roomname, roomdesc))
