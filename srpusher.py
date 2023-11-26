@@ -82,8 +82,8 @@ class SRPusher(Config):
 
     def discover_plugins(self) -> None:
         self._plugins = {
-           name: importlib.import_module(name)
-           for finder, name, ispkg in pkgutil.iter_modules() if name.startswith('srpusher_plugin_')
+            name: importlib.import_module(name)
+            for finder, name, ispkg in pkgutil.iter_modules() if name.startswith('srpusher_plugin_')
         }
         self._log = self._plugins["srpusher_plugin_logging"].SRPusher_Logger()
 
@@ -241,11 +241,7 @@ class SRPusher(Config):
         return False
 
 
-    def check_sr_status(self) -> bool:
-        """ Check SR status and send notification if needed """
-        nowtime = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
-        content = self.sr_status
-
+    def check_sr_status_diff(self, content: dict) -> list:
         # pass 1
         online_members = []
         alive_rooms = []
@@ -264,12 +260,6 @@ class SRPusher(Config):
         # compare current list with `previous` list
         offlined_users = self.get_users_diff(self.key_members_previous, self.key_members)
         onlined_users = self.get_users_diff(self.key_members, self.key_members_previous)
-        if len(onlined_users):
-            logging.info("[bold]--- onlined[/]", extra={"markup": True})
-            self.srpprint(onlined_users, style="bold white")
-        if len(offlined_users):
-            logging.info("[grey]--- offlined[/]", extra={"markup": True})
-            self.srpprint(offlined_users, style="grey")
         # flush previous list with current list
         self.flush_users_status(self.key_members, self.key_members_previous)
 
@@ -278,17 +268,15 @@ class SRPusher(Config):
         # compare current list with `previous` list
         offlined_rooms = self.get_rooms_diff(self.key_rooms_previous, self.key_rooms)
         onlined_rooms = self.get_rooms_diff(self.key_rooms, self.key_rooms_previous)
-        if len(onlined_rooms):
-            logging.info("[bold]Created room: [/]", extra={"markup": True})
-            logging.info([self.get_room_cache(r).get("roomName") for r in onlined_rooms])
-        if len(offlined_rooms):
-            logging.info("[grey]Deleted room: [/]", extra={"markup": True})
-            logging.info([self.get_room_cache(r).get("roomName") for r in offlined_rooms])
         # flush previous list with current list
         self.flush_rooms_status(self.key_rooms, self.key_rooms_previous)
 
+        return onlined_users, offlined_users, onlined_rooms, offlined_rooms
 
+
+    def check_sr_status_members(self, content: dict, onlined_users: list) -> dict:
         # pass 2
+        nowtime = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
         new_rooms_text = {}
         for room in content["rooms"]:
             is_new_room = False
@@ -323,6 +311,29 @@ class SRPusher(Config):
                     room_members_text['room'] = '{}{}'.format(roomname, ' (protected)' if needPasswd else '')
                     room_members_text['detail'] = 'Members({}):\n{}\n{}\nElapsed: {}\n\n'.format(numMembers, room_members, roomdesc, (nowtime - createTime))
                     new_rooms_text[roomid] = room_members_text
+        return new_rooms_text
+
+
+    def check_sr_status(self) -> bool:
+        """ Check SR status and send notification if needed """
+        content = self.sr_status
+
+        onlined_users, offlined_users, onlined_rooms, offlined_rooms = self.check_sr_status_diff(content)
+        new_rooms_text = self.check_sr_status_members(content=content, onlined_users=onlined_users)
+
+        if len(onlined_rooms):
+            logging.info("[bold]--- Created room: [/]", extra={"markup": True})
+            logging.info([self.get_room_cache(r).get("roomName") for r in onlined_rooms])
+        if len(offlined_rooms):
+            logging.info("[grey]--- Deleted room: [/]", extra={"markup": True})
+            logging.info([self.get_room_cache(r).get("roomName") for r in offlined_rooms])
+        if len(onlined_users):
+            logging.info("[bold]--- onlined[/]", extra={"markup": True})
+            self.srpprint(onlined_users, style="bold white")
+        if len(offlined_users):
+            logging.info("[grey]--- offlined[/]", extra={"markup": True})
+            self.srpprint(offlined_users, style="grey")
+
         for k, v in new_rooms_text.items():
             result = self.send_notification(v['detail'], title=v['room'])
             logging.info(str(result))
