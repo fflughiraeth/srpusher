@@ -20,6 +20,7 @@ import logging
 import rich.logging
 import importlib
 import pkgutil
+import inspect
 
 
 class Config(object):
@@ -51,6 +52,12 @@ class SRPusher(Config):
     _previous_sr_status_epoch = 0
     _previous_sr_status = None
     _plugins = []
+    _plugin_classes = {}
+    _plugin_hooks = {}
+    f_onlined_rooms = {}
+    f_offlined_rooms = {}
+    f_onlined_users = {}
+    f_offlined_users = {}
 
     def __init__(self, dry_run=False, configfilename="settings.yml") -> None:
         self._filename = configfilename
@@ -77,14 +84,13 @@ class SRPusher(Config):
                 api_token=self.settings['pushover']['api_token'],
             )
 
-
-    def discover_plugins(self) -> None:
-        self._plugins = {
+    @classmethod
+    def discover_plugins(cls) -> None:
+        cls._plugins = {
             name: importlib.import_module(name)
-            for finder, name, ispkg in pkgutil.iter_modules() if name.startswith('srpusher_plugin_')
+            for _, name, _ in pkgutil.iter_modules() if name.startswith('srpusher_plugin_')
         }
-        self._log = self._plugins["srpusher_plugin_logging"].SRPusher_Logger()
-
+        logging.info("Plugins: " + str(cls._plugins))
 
     def disable_pushover(self) -> None:
         self.pushover = None
@@ -255,6 +261,7 @@ class SRPusher(Config):
             self.set_room_cache(roomid, room)
             for m in room["members"]:
                 userid = m.get("userId")
+                m["roomid"] = roomid  # for user->room lookup
                 online_members.append(userid)
                 self.set_user_cache(userid, m)
         # set current users to `current` list
@@ -314,7 +321,6 @@ class SRPusher(Config):
                     new_rooms_text[roomid] = room_members_text
         return new_rooms_text
 
-
     def check_sr_status(self) -> bool:
         """ Check SR status and send notification if needed """
         content = self.sr_status
@@ -325,15 +331,27 @@ class SRPusher(Config):
         if len(onlined_rooms):
             logging.info("[bold]--- Created room: [/]", extra={"markup": True})
             logging.info([self.get_room_cache(r).get("roomName") for r in onlined_rooms])
+            for r in onlined_rooms:
+                self._onlined_room(room=self.get_room_cache, roomid=r)
         if len(offlined_rooms):
             logging.info("[grey]--- Disappeared room: [/]", extra={"markup": True})
             logging.info([self.get_room_cache(r).get("roomName") for r in offlined_rooms])
+            for r in offlined_rooms:
+                self._offlined_room(room=self.get_room_cache, roomid=r)
         if len(onlined_users):
             logging.info("[bold]--- onlined[/]", extra={"markup": True})
             self.srpprint(onlined_users, style="bold white")
+            for u in onlined_users:
+                roomid = self.get_user_cache(u).get("roomid")
+                room = self.get_room_cache(roomid)
+                self._onlined_user(user=self.get_user_cache(u), room=room, roomid=roomid)
         if len(offlined_users):
             logging.info("[grey]--- offlined[/]", extra={"markup": True})
             self.srpprint(offlined_users, style="grey")
+            for u in offlined_users:
+                roomid = self.get_user_cache(u).get("roomid")
+                room = self.get_room_cache(roomid)
+                self._offlined_user(user=self.get_user_cache(u), room=room, roomid=roomid)
 
         for k, v in new_rooms_text.items():
             result = self.send_notification(v['detail'], title=v['room'])
@@ -352,6 +370,94 @@ class SRPusher(Config):
             time.sleep(base_wait_sec * jitter)
 
 
+    """ for plugin decorators and hooks """
+    @classmethod
+    def plugin_register(cls, _class) -> None:
+        classname = _class.__class__.__name__
+        cls._plugin_classes[classname] = _class
+        logging.info("Registered plugin: " + classname)
+
+    @staticmethod
+    def get_classname(func) -> tuple:
+        """ from in the plugin, register self from __init__ """
+        funcsplit = func.__qualname__.split('.')
+        if isinstance(funcsplit, list):
+            clsname = funcsplit[0]
+            funcname = funcsplit[1]
+        else:
+            clsname = None
+            funcname = func.__qualname__
+        return (clsname, funcname)
+
+    @classmethod
+    def onlined_room(cls, func):
+        """ decorator; call when room is onlined """
+        (classname, _) = cls.get_classname(func)
+        if type(classname) is str and classname != '':
+            cls.f_onlined_rooms[classname] = func
+            logging.info("decorated '{}' to '{}'".format(func.__qualname__, inspect.currentframe().f_code.co_name))
+        else:
+            logging.error("decoration failed '{}' to '{}'".format(func.__qualname__, inspect.currentframe().f_code.co_name))
+        return func
+
+    @classmethod
+    def offlined_room(cls, func):
+        """ decorator; call when room is offlined  """
+        (classname, _) = cls.get_classname(func)
+        if type(classname) is str and classname != '':
+            cls.f_offlined_rooms[classname] = func
+            logging.info("decorated '{}' to '{}'".format(func.__qualname__, inspect.currentframe().f_code.co_name))
+        else:
+            logging.error("decoration failed '{}' to '{}'".format(func.__qualname__, inspect.currentframe().f_code.co_name))
+        return func
+
+    @classmethod
+    def onlined_user(cls, func):
+        """ decorator; call when user is onlined  """
+        (classname, _) = cls.get_classname(func)
+        if type(classname) is str and classname != '':
+            cls.f_onlined_users[classname] = func
+            logging.info("decorated '{}' to '{}'".format(func.__qualname__, inspect.currentframe().f_code.co_name))
+        else:
+            logging.error("decoration failed '{}' to '{}'".format(func.__qualname__, inspect.currentframe().f_code.co_name))
+        return func
+
+    @classmethod
+    def offlined_user(cls, func):
+        """ decorator; call when user is offlined  """
+        (classname, _) = cls.get_classname(func)
+        if type(classname) is str and classname != '':
+            cls.f_offlined_users[classname] = func
+            logging.info("decorated '{}' to '{}'".format(func.__qualname__, inspect.currentframe().f_code.co_name))
+        else:
+            logging.error("decoration failed '{}' to '{}'".format(func.__qualname__, inspect.currentframe().f_code.co_name))
+        return func
+
+    def _onlined_room(self, room: dict, roomid: str) -> None:
+        ret = []
+        for classname, func in self.f_onlined_rooms.items():
+            ret.append(func(self._plugin_classes[classname], room=room, roomid=roomid))
+        return ret
+
+    def _offlined_room(self, room: dict, roomid: str) -> None:
+        ret = []
+        for classname, func in self.f_offlined_rooms.items():
+            ret.append(func(self._plugin_classes[classname], room=room, roomid=roomid))
+        return ret
+
+    def _onlined_user(self, user: dict, room: dict, roomid: str) -> None:
+        ret = []
+        for classname, func in self.f_onlined_users.items():
+            ret.append(func(self._plugin_classes[classname], user=user, room=room, roomid=roomid))
+        return ret
+
+    def _offlined_user(self, user: dict, room: dict, roomid: str) -> None:
+        ret = []
+        for classname, func in self.f_offlined_users.items():
+            ret.append(func(self._plugin_classes[classname], user=user, room=room, roomid=roomid))
+        return ret
+
+
 if __name__ == '__main__':
     loglevel = logging.INFO
 
@@ -363,7 +469,7 @@ if __name__ == '__main__':
     parser.add_argument('--disable_pushover', action='store_true', help='disable pushover')
     parser.add_argument('--quiet', '-s', action='store_true', help="show less logs")
     parser.add_argument('--debug', '-v', action='store_true', help='show more logs')
-    parser.add_argument('--plugins', action='store_true')
+    parser.add_argument('--disable_plugins', action='store_true', help='disable plugin')
     args = parser.parse_args().__dict__
 
     if args.get('quiet'):
@@ -372,14 +478,15 @@ if __name__ == '__main__':
         loglevel = logging.DEBUG
     if 'DEBUG' in os.environ:
         loglevel = logging.DEBUG
-    if args.get('plugins'):
-        sys.exit(0)
 
     stream_handler.setLevel(loglevel)
     logging.basicConfig(level=loglevel, handlers=[stream_handler])
 
     if loglevel <= logging.INFO:
         print("hit Ctrl-c to exit.")
+
+    if not args.get('disable_plugins'):
+        SRPusher.discover_plugins()
 
     srp = SRPusher()
     logging.info("hit Ctrl-c to exit.")
