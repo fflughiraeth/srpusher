@@ -12,8 +12,8 @@ You can receive notify with your PushOver when *someone* (as you like) has been 
 
 #### SR acccount is not required.
 
-- Python > 3.7
-- Redis > 4
+- Python > 3.6
+- Redis > 3
 
 
 ## Getting Started
@@ -78,7 +78,7 @@ No matter either way. Don't run two or more at the same time. When using *Run on
 
     ```sh
     $ source venv/bin/activate
-    (venv)$ python srpusher.py
+    (venv)$ python run_srpusher.py
     ...
     ```
 3. to stop: Ctrl-c
@@ -101,7 +101,7 @@ No matter either way. Don't run two or more at the same time. When using *Run on
 1. to run:
    ```sh
    $ source venv/bin/activate
-   (venv) $ python srpusher.py --runonce
+   (venv) $ python run_srpusher.py --runonce
    ...
    (venv) $ deactivate
    $
@@ -116,6 +116,35 @@ how it works
 1. If any of the users who went online this time *you  pinned*, the room and users information will be notified via PushOver.
 1. In foreground mode, it after waiting, then returns to the begeninning. In *Run once*, it exits immediately.
 
+
+## How to write plugin
+
+### What is this
+
+This plugin mechanism makes it easy to create your original functions() and methods() that are **called when some events occur.**
+
+Events are listed in the table below.
+
+### Getting started
+
+1. Create your `.py` file, the filename must be startswith `srpusher_plugin_`, and place it at the same path as `srpusher.py`.
+1. Write `import pluggly` in the `.py`
+1. Write `srphookimpl = pluggy.HookimplMarker("srpusher")` in the `.py` just below `import` statements.
+2. Define a class, that name must startswith `SRPusher_`. No inheritance required.
+
+   1. Write your method(s). See table below.
+   2. Decorate with `@srphookimpl` the method you wrote.
+
+| name of method | given args | Events (When to called) |
+| ---- | ---- | ---- |
+| onlined_room | (room: dict, roomid: str) | When a new room is created. |
+| offlined_room | (room: dict, roomid: str) | When a room disappeared. <br/>The room object given is cached when it last existed. |
+| onlined_user | (user: dict, room: dict, roomid: str) | When a new user appears. |
+| offlined_user | (user: dict, room: dict, roomid: str) | When a user is no longer in any room (signed-out).<br />The room and user objects given are cached they last existed. |
+
+- room: One of the `room` object from original API
+- roomid: generated room ID, not from original API
+- user: One of the `user` from original API
 
 ## uninstall
 
