@@ -2,9 +2,6 @@
 # -*- coding: utf-8 -*-
 # vim: ts=4 sw=4 sts=4 ff=unix ft=python expandtab
 
-import os
-import sys
-import argparse
 import json
 import yaml
 import requests
@@ -17,10 +14,9 @@ import dateutil.parser
 import pushover
 import hashlib
 import logging
-import rich.logging
-import importlib
-import pkgutil
-import inspect
+import pluggy
+
+srphookspec = pluggy.HookspecMarker("srpusher")
 
 
 class Config(object):
@@ -51,16 +47,12 @@ class SRPusher(Config):
     key_rooms_previous = "rooms_prev"
     _previous_sr_status_epoch = 0
     _previous_sr_status = None
-    _plugins = []
-    _plugin_classes = {}
-    _plugin_hooks = {}
-    f_onlined_rooms = {}
-    f_offlined_rooms = {}
-    f_onlined_users = {}
-    f_offlined_users = {}
+    _disable_plugins = False
 
-    def __init__(self, dry_run=False, configfilename="settings.yml") -> None:
+
+    def __init__(self, dry_run=False, configfilename="settings.yml", pm=None) -> None:
         self._filename = configfilename
+        self.pm = pm
         if 'debug' in self.settings['global'] and self.settings['global'].get('debug') is True:
             self.debug = True
         if dry_run:
@@ -84,13 +76,14 @@ class SRPusher(Config):
                 api_token=self.settings['pushover']['api_token'],
             )
 
-    @classmethod
-    def discover_plugins(cls) -> None:
-        cls._plugins = {
-            name: importlib.import_module(name)
-            for _, name, _ in pkgutil.iter_modules() if name.startswith('srpusher_plugin_')
-        }
-        logging.info("Plugins: " + str(cls._plugins))
+
+    @property
+    def disable_plugins(self) -> bool:
+        return self._disable_plugins
+
+    @disable_plugins.setter
+    def disable_plugins(self, value: bool) -> None:
+        self._disable_plugins = value
 
     def disable_pushover(self) -> None:
         self.pushover = None
@@ -218,7 +211,7 @@ class SRPusher(Config):
     def srpprint(self, users: list, style: str = '') -> None:
         """ sr pprint for debug """
         for userid in users:
-            logging.info(userid + f" [{style}]" + (self.get_user_cache(userid).get("nickname") if dict(self.get_user_cache(userid)) else '') + "[/]", extra={"markup": True})
+            logging.info(userid + (self.get_user_cache(userid).get("nickname") if dict(self.get_user_cache(userid)) else ''))
 
 
     def check_notify_duplicated(self, keyword: str) -> bool:
@@ -329,29 +322,29 @@ class SRPusher(Config):
         new_rooms_text = self.check_sr_status_members(content=content, onlined_users=onlined_users)
 
         if len(onlined_rooms):
-            logging.info("[bold]--- Created room: [/]", extra={"markup": True})
-            logging.info([self.get_room_cache(r).get("roomName") for r in onlined_rooms])
+            # logging.info("[bold]--- Created room: [/]", extra={"markup": True})
+            # logging.info([self.get_room_cache(r).get("roomName") for r in onlined_rooms])
             for r in onlined_rooms:
-                self._onlined_room(room=self.get_room_cache, roomid=r)
+                self.pm.hook.onlined_room(room=self.get_room_cache(r).copy(), roomid=r)
         if len(offlined_rooms):
-            logging.info("[grey]--- Disappeared room: [/]", extra={"markup": True})
-            logging.info([self.get_room_cache(r).get("roomName") for r in offlined_rooms])
+            # logging.info("[grey]--- Disappeared room: [/]", extra={"markup": True})
+            # logging.info([self.get_room_cache(r).get("roomName") for r in offlined_rooms])
             for r in offlined_rooms:
-                self._offlined_room(room=self.get_room_cache, roomid=r)
+                self.pm.hook.offlined_room(room=self.get_room_cache(r).copy(), roomid=r)
         if len(onlined_users):
-            logging.info("[bold]--- onlined[/]", extra={"markup": True})
-            self.srpprint(onlined_users, style="bold white")
+            # logging.info("[bold]--- onlined[/]", extra={"markup": True})
+            # self.srpprint(onlined_users, style="bold white")
             for u in onlined_users:
                 roomid = self.get_user_cache(u).get("roomid")
                 room = self.get_room_cache(roomid)
-                self._onlined_user(user=self.get_user_cache(u), room=room, roomid=roomid)
+                self.pm.hook.onlined_user(user=self.get_user_cache(u).copy(), room=room, roomid=roomid)
         if len(offlined_users):
-            logging.info("[grey]--- offlined[/]", extra={"markup": True})
-            self.srpprint(offlined_users, style="grey")
+            # logging.info("[grey]--- offlined[/]", extra={"markup": True})
+            # self.srpprint(offlined_users, style="grey")
             for u in offlined_users:
                 roomid = self.get_user_cache(u).get("roomid")
                 room = self.get_room_cache(roomid)
-                self._offlined_user(user=self.get_user_cache(u), room=room, roomid=roomid)
+                self.pm.hook.offlined_user(user=self.get_user_cache(u).copy(), room=room, roomid=roomid)
 
         for k, v in new_rooms_text.items():
             result = self.send_notification(v['detail'], title=v['room'])
@@ -377,6 +370,7 @@ class SRPusher(Config):
         cls._plugin_classes[classname] = _class
         logging.info("Registered plugin: " + classname)
 
+
     @staticmethod
     def get_classname(func) -> tuple:
         """ from in the plugin, register self from __init__ """
@@ -389,110 +383,18 @@ class SRPusher(Config):
             funcname = func.__qualname__
         return (clsname, funcname)
 
-    @classmethod
-    def onlined_room(cls, func):
-        """ decorator; call when room is onlined """
-        (classname, _) = cls.get_classname(func)
-        if type(classname) is str and classname != '':
-            cls.f_onlined_rooms[classname] = func
-            logging.info("decorated '{}' to '{}'".format(func.__qualname__, inspect.currentframe().f_code.co_name))
-        else:
-            logging.error("decoration failed '{}' to '{}'".format(func.__qualname__, inspect.currentframe().f_code.co_name))
-        return func
+    @srphookspec
+    def onlined_room(self, room: dict, roomid: str) -> None:
+        """ call when room has created """
 
-    @classmethod
-    def offlined_room(cls, func):
-        """ decorator; call when room is offlined  """
-        (classname, _) = cls.get_classname(func)
-        if type(classname) is str and classname != '':
-            cls.f_offlined_rooms[classname] = func
-            logging.info("decorated '{}' to '{}'".format(func.__qualname__, inspect.currentframe().f_code.co_name))
-        else:
-            logging.error("decoration failed '{}' to '{}'".format(func.__qualname__, inspect.currentframe().f_code.co_name))
-        return func
+    @srphookspec
+    def offlined_room(self, room: dict, roomid: str) -> None:
+        """ call when room has vanished """
 
-    @classmethod
-    def onlined_user(cls, func):
-        """ decorator; call when user is onlined  """
-        (classname, _) = cls.get_classname(func)
-        if type(classname) is str and classname != '':
-            cls.f_onlined_users[classname] = func
-            logging.info("decorated '{}' to '{}'".format(func.__qualname__, inspect.currentframe().f_code.co_name))
-        else:
-            logging.error("decoration failed '{}' to '{}'".format(func.__qualname__, inspect.currentframe().f_code.co_name))
-        return func
+    @srphookspec
+    def onlined_user(self, user: dict, room: dict, roomid: str) -> None:
+        """ call when user is onlined  """
 
-    @classmethod
-    def offlined_user(cls, func):
-        """ decorator; call when user is offlined  """
-        (classname, _) = cls.get_classname(func)
-        if type(classname) is str and classname != '':
-            cls.f_offlined_users[classname] = func
-            logging.info("decorated '{}' to '{}'".format(func.__qualname__, inspect.currentframe().f_code.co_name))
-        else:
-            logging.error("decoration failed '{}' to '{}'".format(func.__qualname__, inspect.currentframe().f_code.co_name))
-        return func
-
-    def _onlined_room(self, room: dict, roomid: str) -> None:
-        ret = []
-        for classname, func in self.f_onlined_rooms.items():
-            ret.append(func(self._plugin_classes[classname], room=room, roomid=roomid))
-        return ret
-
-    def _offlined_room(self, room: dict, roomid: str) -> None:
-        ret = []
-        for classname, func in self.f_offlined_rooms.items():
-            ret.append(func(self._plugin_classes[classname], room=room, roomid=roomid))
-        return ret
-
-    def _onlined_user(self, user: dict, room: dict, roomid: str) -> None:
-        ret = []
-        for classname, func in self.f_onlined_users.items():
-            ret.append(func(self._plugin_classes[classname], user=user, room=room, roomid=roomid))
-        return ret
-
-    def _offlined_user(self, user: dict, room: dict, roomid: str) -> None:
-        ret = []
-        for classname, func in self.f_offlined_users.items():
-            ret.append(func(self._plugin_classes[classname], user=user, room=room, roomid=roomid))
-        return ret
-
-
-if __name__ == '__main__':
-    loglevel = logging.INFO
-
-    stream_handler: rich.logging.RichHandler = rich.logging.RichHandler(rich_tracebacks=True)
-    stream_handler.setFormatter(logging.Formatter('%(message)s'))
-
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--runonce', '-1', action='store_true', help='run once and exit')
-    parser.add_argument('--disable_pushover', action='store_true', help='disable pushover')
-    parser.add_argument('--quiet', '-s', action='store_true', help="show less logs")
-    parser.add_argument('--debug', '-v', action='store_true', help='show more logs')
-    parser.add_argument('--disable_plugins', action='store_true', help='disable plugin')
-    args = parser.parse_args().__dict__
-
-    if args.get('quiet'):
-        loglevel = logging.ERROR
-    if args.get('debug'):
-        loglevel = logging.DEBUG
-    if 'DEBUG' in os.environ:
-        loglevel = logging.DEBUG
-
-    stream_handler.setLevel(loglevel)
-    logging.basicConfig(level=loglevel, handlers=[stream_handler])
-
-    if loglevel <= logging.INFO:
-        print("hit Ctrl-c to exit.")
-
-    if not args.get('disable_plugins'):
-        SRPusher.discover_plugins()
-
-    srp = SRPusher()
-    logging.info("hit Ctrl-c to exit.")
-
-    if args.get('disable_pushover'):
-        srp.disable_pushover()
-
-    srp.run(args.get('runonce'))
-    sys.exit(0)
+    @srphookspec
+    def offlined_user(self, user: dict, room: dict, roomid: str) -> None:
+        """ call when user is offlined  """

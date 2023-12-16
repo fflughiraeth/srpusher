@@ -3,3 +3,4 @@ python-dateutil
 python-pushover
 PyYAML
 rich.logging
+pluggy

@@ -177,25 +177,6 @@ eyJyb29tcyI6IFt7InJlYWxtIjogNCwgImluZGV4IjogMSwgInJvb21BdHRyaWJ1dGUiOiB7Imxhbmd1
         diff = self.s.get_users_diff(self.key_members_previous, self.key_members)
         self.assertEqual(len(diff), len(members))
 
-    def test_plugin_register(self):
-        """ register(self) """
-        self.s.plugin_register(self)
-        self.assertEqual(self.s._plugin_classes[self.__class__.__name__], self)
-
-    @SRPusher.onlined_room
-    def __onlined_room(self, room: dict, roomid: str) -> bool:
-        """ invoked from main """
-        return [self.__class__.__name__, room, roomid]
-
-    def test__onlined_room(self):
-        """ trigger """
-        self.s.plugin_register(self)
-        _roomid = self.s.generate_roomid(createTime="_____", roomName=self._sr_status["rooms"][0]["roomName"], nsgmmemberid=self._sr_status["rooms"][0]["members"][0]["nsgmMemberId"])
-        ret = self.s._onlined_room(self._sr_status["rooms"][0], _roomid)
-        self.assertEqual(ret[0][0], self.__class__.__name__)
-        self.assertEqual(ret[0][1], self._sr_status["rooms"][0])
-        self.assertEqual(ret[0][2], _roomid)
-
 
 if __name__ == "__main__":
     unittest.main()

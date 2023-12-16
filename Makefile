@@ -1,9 +1,9 @@
 .PHONY: run test clean setup lint
 run:
-	./venv/bin/python srpusher.py
+	./venv/bin/python run_srpusher.py
 
 lint:
-	./venv/bin/flake8 srpusher.py
+	./venv/bin/flake8 run_srpusher.py srpusher.py srpusher_plugin_console.py
 
 test:
 	./venv/bin/python tests.py
