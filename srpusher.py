@@ -322,30 +322,21 @@ class SRPusher(Config):
         new_rooms_text = self.check_sr_status_members(content=content, onlined_users=onlined_users)
 
         if len(onlined_rooms):
-            # logging.info("[bold]--- Created room: [/]", extra={"markup": True})
-            # logging.info([self.get_room_cache(r).get("roomName") for r in onlined_rooms])
             for r in onlined_rooms:
                 self.pm.hook.onlined_room(room=self.get_room_cache(r).copy(), roomid=r)
         if len(offlined_rooms):
-            # logging.info("[grey]--- Disappeared room: [/]", extra={"markup": True})
-            # logging.info([self.get_room_cache(r).get("roomName") for r in offlined_rooms])
             for r in offlined_rooms:
                 self.pm.hook.offlined_room(room=self.get_room_cache(r).copy(), roomid=r)
         if len(onlined_users):
-            # logging.info("[bold]--- onlined[/]", extra={"markup": True})
-            # self.srpprint(onlined_users, style="bold white")
             for u in onlined_users:
                 roomid = self.get_user_cache(u).get("roomid")
                 room = self.get_room_cache(roomid)
                 self.pm.hook.onlined_user(user=self.get_user_cache(u).copy(), room=room, roomid=roomid)
         if len(offlined_users):
-            # logging.info("[grey]--- offlined[/]", extra={"markup": True})
-            # self.srpprint(offlined_users, style="grey")
             for u in offlined_users:
                 roomid = self.get_user_cache(u).get("roomid")
                 room = self.get_room_cache(roomid)
                 self.pm.hook.offlined_user(user=self.get_user_cache(u).copy(), room=room, roomid=roomid)
-
         for k, v in new_rooms_text.items():
             result = self.send_notification(v['detail'], title=v['room'])
             logging.info(str(result))
