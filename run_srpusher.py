@@ -28,6 +28,21 @@ def discover_plugins(disable_plugins=False) -> dict:
     return _plugins
 
 
+def show_plugins(plugins: dict) -> None:
+    """ show list of plugins
+        plugins: {'module_name': <class 'module'>}
+    """
+    print("Discovered %d Plugins:\n--" % (len(plugins)))
+    for package_name, module in plugins.items():
+        for m in dir(module):
+            if m.startswith('SRPusher_'):
+                ci = getattr(module, m)()
+                print(f"Module: {package_name}")
+                print(f"Class: {m}")
+                print(f"Doc: {ci.__doc__}")
+                print("\n--")
+
+
 if __name__ == '__main__':
     loglevel = logging.INFO
 
@@ -59,6 +74,10 @@ if __name__ == '__main__':
         SRPusher.disable_plugins = True
 
     plugins = discover_plugins(args.get('disable_plugins'))
+    if args.get('list_plugins'):
+        show_plugins(plugins)
+        sys.exit(0)
+
     logging.debug("All plugins: " + str(plugins))
     pm = pluggy.PluginManager("srpusher")
     srp = SRPusher(pm=pm)
