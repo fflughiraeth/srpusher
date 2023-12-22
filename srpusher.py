@@ -15,6 +15,7 @@ import pushover
 import hashlib
 import logging
 import pluggy
+from typing import Tuple
 
 srphookspec = pluggy.HookspecMarker("srpusher")
 
@@ -241,8 +242,11 @@ class SRPusher(Config):
         return False
 
 
-    def check_sr_status_diff(self, content: dict) -> list:
-        # pass 1
+    def get_onlines(self, content: dict) -> Tuple[list, list]:
+        """
+        Parse api content object, get online members and rooms.
+        Side effect: Update user and room *cache in redis*.
+        """
         online_members = []
         alive_rooms = []
         for room in content["rooms"]:
@@ -257,6 +261,12 @@ class SRPusher(Config):
                 m["roomid"] = roomid  # for user->room lookup
                 online_members.append(userid)
                 self.set_user_cache(userid, m)
+        return online_members, alive_rooms
+
+
+    def check_sr_status_diff(self, content: dict) -> Tuple[list, list, list, list]:
+        # pass 1
+        online_members, alive_rooms = self.get_onlines(content)
         # set current users to `current` list
         self.set_users_status(self.key_members, online_members)
         # compare current list with `previous` list
