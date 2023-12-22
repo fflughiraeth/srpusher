@@ -371,18 +371,6 @@ class SRPusher(Config):
         logging.info("Registered plugin: " + classname)
 
 
-    @staticmethod
-    def get_classname(func) -> tuple:
-        """ from in the plugin, register self from __init__ """
-        funcsplit = func.__qualname__.split('.')
-        if isinstance(funcsplit, list):
-            clsname = funcsplit[0]
-            funcname = funcsplit[1]
-        else:
-            clsname = None
-            funcname = func.__qualname__
-        return (clsname, funcname)
-
     @srphookspec
     def onlined_room(self, room: dict, roomid: str) -> None:
         """ call when room has created """
