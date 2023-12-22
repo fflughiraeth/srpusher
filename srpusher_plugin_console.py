@@ -34,6 +34,7 @@ class SRPusher_Console(object):
     def onlined_user(self, user: dict, room: dict, roomid: str) -> None:
         """ Called when a new user appears. """
         logging.info("User Onlined: '{}' to room '{}'".format(user.get("nickname"), room.get("roomName")))
+
     @srphookimpl
     def offlined_user(self, user: dict, room: dict, roomid: str) -> None:
         """ Called when a user is no longer in any room (signed-out). The room and user objects given are cached they last existed. """
