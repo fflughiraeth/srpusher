@@ -123,6 +123,8 @@ how it works
 
 This plugin mechanism makes it easy to create your original functions() and methods() that are **called when some events occur.**
 
+`srpusher_plugin_console.py` is an accompanying sample that displays status in console, it works by default.
+
 Events are listed in the table below.
 
 ### Getting started

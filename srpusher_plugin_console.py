@@ -19,6 +19,8 @@ class SRPusher_Console(object):
     2. The method name of the method you want to be hooked must be [`onlined_room`, `offlined_room`, `onlined_user`, `offlined_user`]. and the name is usually unchangeable.
     3. These method must have `srphookimpl` decorator.
     """
+    def __init__(self, parent=None):
+        pass
 
     @srphookimpl
     def onlined_room(self, room: dict, roomid: str) -> None:
@@ -39,3 +41,8 @@ class SRPusher_Console(object):
     def offlined_user(self, user: dict, room: dict, roomid: str) -> None:
         """ Called when a user is no longer in any room (signed-out). The room and user objects given are cached they last existed. """
         logging.info("User Offlined: '{}' from room '{}'".format(user.get("nickname"), room.get("roomName")))
+
+    @srphookimpl
+    def option_room(self, room: dict, roomid: str) -> None:
+        """ room alternatives """
+        logging.error("(Option)Room: '{}'".format(room.get("roomName")))

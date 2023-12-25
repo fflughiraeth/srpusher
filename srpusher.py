@@ -45,8 +45,10 @@ class SRPusher(Config):
     key_members = "members"
     key_members_previous = "members_prev"
     key_rooms = "rooms"
+    key_rooms_option = "rooms_option"
     key_rooms_previous = "rooms_prev"
     _previous_sr_status_epoch = 0
+    _previous_sr_status_epoch_private = 0
     _previous_sr_status = None
     _disable_plugins = False
 
@@ -107,9 +109,15 @@ class SRPusher(Config):
         if response.status_code == requests.codes.ok:
             self._previous_sr_status_epoch = time.time()
             self._previous_sr_status = json.loads(response.text)
+            self.pm.hook.update_sr_status(content=self._previous_sr_status)
         else:
             logging.error(f"(SR API) {response.status_code}: {response.text}")
         return self._previous_sr_status
+
+    @property
+    def sr_status_option(self) -> list:
+        """ skel """
+        return None
 
 
     def send_notification(self, message: str, title: str) -> bool:
@@ -164,6 +172,8 @@ class SRPusher(Config):
 
     def get_room_cache(self, roomid: str) -> object:
         """ Get room's detail cache from redis if exists (unreliable) """
+        if roomid is None:
+            return {}
         key = self.header_roomcache + roomid
         try:
             roomcache = json.loads(self.redis.get(key))
@@ -264,9 +274,14 @@ class SRPusher(Config):
         return online_members, alive_rooms
 
 
-    def check_sr_status_diff(self, content: dict) -> Tuple[list, list, list, list]:
+    def check_sr_status_diff(self, content: dict, content_option=None) -> Tuple[list, list, list, list, list]:
         # pass 1
         online_members, alive_rooms = self.get_onlines(content)
+        if content_option:
+            _, alive_rooms_option = self.get_onlines(content=content_option)
+        else:
+            _, alive_rooms_option = ([], [])
+
         # set current users to `current` list
         self.set_users_status(self.key_members, online_members)
         # compare current list with `previous` list
@@ -278,10 +293,15 @@ class SRPusher(Config):
         # also
         self.set_rooms_status(self.key_rooms, alive_rooms)
         offlined_rooms = self.get_rooms_diff(self.key_rooms_previous, self.key_rooms)
+        if content_option and len(alive_rooms_option) > 0:
+            self.set_rooms_status(self.key_rooms_option, alive_rooms_option)
+            option_rooms = self.get_rooms_diff(self.key_rooms, self.key_rooms_option)
+        else:
+            option_rooms = []
         onlined_rooms = self.get_rooms_diff(self.key_rooms, self.key_rooms_previous)
         self.flush_rooms_status(self.key_rooms, self.key_rooms_previous)
 
-        return onlined_users, offlined_users, onlined_rooms, offlined_rooms
+        return onlined_users, offlined_users, onlined_rooms, offlined_rooms, option_rooms
 
 
     def check_sr_status_members(self, content: dict, onlined_users: list) -> dict:
@@ -326,9 +346,10 @@ class SRPusher(Config):
 
     def check_sr_status(self) -> bool:
         """ Check SR status and send notification if needed """
+        content_option = self.sr_status_option
         content = self.sr_status
 
-        onlined_users, offlined_users, onlined_rooms, offlined_rooms = self.check_sr_status_diff(content)
+        onlined_users, offlined_users, onlined_rooms, offlined_rooms, option_rooms = self.check_sr_status_diff(content, content_option=content_option)
         new_rooms_text = self.check_sr_status_members(content=content, onlined_users=onlined_users)
 
         if len(onlined_rooms):
@@ -337,6 +358,9 @@ class SRPusher(Config):
         if len(offlined_rooms):
             for r in offlined_rooms:
                 self.pm.hook.offlined_room(room=self.get_room_cache(r).copy(), roomid=r)
+        if len(option_rooms):
+            for r in option_rooms:
+                self.pm.hook.option_room(room=self.get_room_cache(r).copy(), roomid=r)
         if len(onlined_users):
             for u in onlined_users:
                 roomid = self.get_user_cache(u).get("roomid")
@@ -360,7 +384,7 @@ class SRPusher(Config):
             if runonce:
                 return
             jitter = random.uniform(1 - float(self.settings["sr"]["api_duration_jitter"]), 1 + self.settings["sr"]["api_duration_jitter"])
-            logging.info(f"sleep {int(base_wait_sec * jitter)} sec")
+            logging.info(f"{len(self.sr_status.get('rooms'))} rooms available. sleep {int(base_wait_sec * jitter)} sec")
             time.sleep(base_wait_sec * jitter)
 
 
@@ -381,9 +405,17 @@ class SRPusher(Config):
         """ call when room has vanished """
 
     @srphookspec
+    def option_room(self, room: dict, roomid: str) -> None:
+        """ call when room has vanished """
+
+    @srphookspec
     def onlined_user(self, user: dict, room: dict, roomid: str) -> None:
         """ call when user is onlined  """
 
     @srphookspec
     def offlined_user(self, user: dict, room: dict, roomid: str) -> None:
         """ call when user is offlined  """
+
+    @srphookspec
+    def update_sr_status(self, content: dict) -> None:
+        """ call when status is updated """

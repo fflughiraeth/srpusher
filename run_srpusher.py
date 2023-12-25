@@ -36,7 +36,7 @@ def show_plugins(plugins: dict) -> None:
     for package_name, module in plugins.items():
         for m in dir(module):
             if m.startswith('SRPusher_'):
-                ci = getattr(module, m)()
+                ci = getattr(module, m)(parent=None)
                 print(f"Module: {package_name}")
                 print(f"Class: {m}")
                 print(f"Doc: {ci.__doc__}")
@@ -85,7 +85,7 @@ if __name__ == '__main__':
     for package_name, module in plugins.items():
         for m in dir(module):
             if m.startswith('SRPusher_'):
-                ci = getattr(module, m)()
+                ci = getattr(module, m)(parent=srp)
                 plugin_name = pm.register(ci)
                 logging.debug(pm.get_hookcallers(ci))
                 logging.info(f"Registered plugin: {package_name}.{m}")
