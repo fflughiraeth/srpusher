@@ -3,7 +3,7 @@ global:
 
 sr:
     api_url: 'uggcf://jroncv.flapebbz.nccfreivpr.lnznun.pbz/pbzz/choyvp/ebbz_yvfg?cntrfvmr=500&ernyz=4'  # rot13ed. if necessary rewrite URL with normal format(https://...)
-    http_user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
+    http_user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     api_duration_sec: 120  # fetching interval on persistent mode
     api_duration_jitter: 0.2  # interval jitter (randomize), 1.0 == 100 percent
     targets:  # List your pinned user's UID

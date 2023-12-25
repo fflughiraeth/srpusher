@@ -4,7 +4,7 @@ global:
 
 sr:
     api_url: 'uggcf://jroncv.flapebbz.nccfreivpr.lnznun.pbz/pbzz/choyvp/ebbz_yvfg?cntrfvmr=500&ernyz=4'
-    http_user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
+    http_user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     api_duration_sec: 120
     api_duration_jitter: 0.2
     targets:
