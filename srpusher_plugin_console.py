@@ -46,3 +46,9 @@ class SRPusher_Console(object):
     def option_room(self, room: dict, roomid: str) -> None:
         """ room alternatives """
         logging.error("(Option)Room: '{}'".format(room.get("roomName")))
+
+    @srphookimpl
+    def hit_keyword(self, messages: list, keyword: None) -> None:
+        """ keyword hit """
+        for message in messages:
+            logging.info("(Hit Keyword) Message: {}".format(message))

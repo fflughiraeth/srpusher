@@ -109,7 +109,7 @@ class SRPusher(Config):
         if response.status_code == requests.codes.ok:
             self._previous_sr_status_epoch = time.time()
             self._previous_sr_status = json.loads(response.text)
-            self.pm.hook.update_sr_status(content=self._previous_sr_status)
+            # self.pm.hook.update_sr_status(content=self._previous_sr_status)
         else:
             logging.error(f"(SR API) {response.status_code}: {response.text}")
         return self._previous_sr_status
@@ -309,6 +309,7 @@ class SRPusher(Config):
         nowtime = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
         new_rooms_text = {}
         for room in content["rooms"]:
+            messages = []
             is_new_room = False
             roomname = room.get("roomName")
             roomdesc = room.get("roomDesc")
@@ -320,6 +321,7 @@ class SRPusher(Config):
             roomid = self.generate_roomid(createTime, roomname, nsgmmemberid)
             if self.check_keyword(roomname, roomdesc, members=members):
                 is_new_room = True
+                messages.append("keyword: {} {}".format(roomname, roomdesc))
                 logging.debug("keyword: {} {}".format(roomname, roomdesc))
             room_members = ""
             for m in room["members"]:
@@ -328,6 +330,7 @@ class SRPusher(Config):
                 # memberid = m.get("nsgmMemberId")  # This could be a action ID?
                 if self.check_keyword(nickname, members=members):
                     is_new_room = True
+                    messages.append("keyword: {} {}".format(roomname, roomdesc))
                     logging.debug("keyword: {}".format(nickname))
                 if userid in list(onlined_users) and userid in self.settings["sr"]["targets"]:
                     header = "  + "  # online-ed now
@@ -342,6 +345,9 @@ class SRPusher(Config):
                     room_members_text['room'] = '{}{}'.format(roomname, ' (protected)' if needPasswd else '')
                     room_members_text['detail'] = 'Members({}):\n{}\n{}\nElapsed: {}\n\n'.format(numMembers, room_members, roomdesc, (nowtime - createTime))
                     new_rooms_text[roomid] = room_members_text
+                if messages:
+                    self.pm.hook.hit_keyword(messages=messages)
+
         return new_rooms_text
 
     def check_sr_status(self) -> bool:
@@ -419,3 +425,11 @@ class SRPusher(Config):
     @srphookspec
     def update_sr_status(self, content: dict) -> None:
         """ call when status is updated """
+
+    @srphookspec
+    def send_pushover(self, message: str, title: str) -> None:
+        """ call when send pushover """
+
+    @srphookspec
+    def hit_keyword(self, messages: list, keyword: None) -> None:
+        """ call when hit keyword """
