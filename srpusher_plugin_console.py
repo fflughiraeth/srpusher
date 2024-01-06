@@ -35,17 +35,17 @@ class SRPusher_Console(object):
     @srphookimpl
     def onlined_user(self, user: dict, room: dict, roomid: str) -> None:
         """ Called when a new user appears. """
-        logging.info("User Onlined: '{}' to room '{}'".format(user.get("nickname"), room.get("roomName")))
+        logging.info("User Onlined: '{}' to room '{}'({}/5)".format(user.get("nickname"), room.get("roomName"), len(room.get("members"))))
 
     @srphookimpl
     def offlined_user(self, user: dict, room: dict, roomid: str) -> None:
         """ Called when a user is no longer in any room (signed-out). The room and user objects given are cached they last existed. """
-        logging.info("User Offlined: '{}' from room '{}'".format(user.get("nickname"), room.get("roomName")))
+        logging.info("User Offlined: '{}' from room '{}'({}/5)".format(user.get("nickname"), room.get("roomName"), len(room.get("members"))))
 
     @srphookimpl
     def option_room(self, room: dict, roomid: str) -> None:
         """ room alternatives """
-        logging.error("(Option)Room: '{}'".format(room.get("roomName")))
+        logging.warn("(Option)Room: '{}'".format(room.get("roomName")))
 
     @srphookimpl
     def hit_keyword(self, messages: list, keyword: None) -> None:
