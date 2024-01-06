@@ -346,7 +346,7 @@ class SRPusher(Config):
                     room_members_text['detail'] = 'Members({}):\n{}\n{}\nElapsed: {}\n\n'.format(numMembers, room_members, roomdesc, (nowtime - createTime))
                     new_rooms_text[roomid] = room_members_text
                 if messages:
-                    self.pm.hook.hit_keyword(messages=messages)
+                    self.pm.hook.hit_keyword(messages=messages, keyword=None)
 
         return new_rooms_text
 
