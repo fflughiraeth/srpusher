@@ -130,9 +130,9 @@ Events are listed in the table below.
 ### Getting started
 
 1. Create your `.py` file, the filename must be startswith `srpusher_plugin_`, and place it at the same path as `srpusher.py`.
-1. Write `import pluggly` in the `.py`
-1. Write `srphookimpl = pluggy.HookimplMarker("srpusher")` in the `.py` just below `import` statements.
-2. Define a class, that name must startswith `SRPusher_`. No inheritance required.
+1. Write `import pluggly` in your `.py`
+1. Write `srphookimpl = pluggy.HookimplMarker("srpusher")` in your `.py` just below `import` statements.
+1. Define a class, that name must startswith `SRPusher_`. No inheritance required.
 
    1. Write your method(s). See table below.
    2. Decorate with `@srphookimpl` the method you wrote.
@@ -147,6 +147,11 @@ Events are listed in the table below.
 - room: One of the `room` object from original API
 - roomid: generated room ID, not from original API
 - user: One of the `user` from original API
+
+### Other limitation
+- The name of method usually fixed. What this means is that there is only one method per event that will be hooked and evaluated in a class.
+- Handle exceptions properly. The parent does not handle any exception in plugins. If you raise an exception from your plugin, the parent would stop. There is no guarantee that the data coming from API has the corrrect structure; there may be no `key` in dict for example.
+
 
 ## uninstall
 
