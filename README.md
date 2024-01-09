@@ -65,7 +65,8 @@ You can receive notify with your PushOver when *someone* (as you like) has been 
 1. **Foreground**; it continues to fetch and run all the time by itself ;  Not daemonized but it continues to run *foreground* until you stop it by Ctrl-c.
 2. **Run once** and terminate, no scheduling. To run periodically, it would require something (like *cron*) .
 
-No matter either way. Don't run two or more at the same time. When using *Run once*, make sure to run at a *sensible interval* (120 seconds or more), and add some *jitter* to the run interval if possible. now that, user's information cache expires 1 hour by default, if it executed at intervals more than 1 hour, may missing user's information will occur.
+No matter either way. Don't run two or more at the same time. When using *Run once*, make sure to run at a *sensible interval* (120 seconds or more), and add some *jitter* to the run interval if possible. now that, user's information cache expires 1 hour by default, if it executed at intervals more than 1 hour, may missing user's information will occur. So it's better that not be longer than 1 hour.
+
 
 ### Foreground mode
 1. to run: just type `make run`
@@ -143,14 +144,30 @@ Events are listed in the table below.
 | offlined_room | (room: dict, roomid: str) | When a room disappeared. <br/>The room object given is cached when it last existed. |
 | onlined_user | (user: dict, room: dict, roomid: str) | When a new user appears. |
 | offlined_user | (user: dict, room: dict, roomid: str) | When a user is no longer in any room (signed-out).<br />The room and user objects given are cached they last existed. |
+| send_pushover | (message: str, title: str) | When a pushover message has sent. |
+| hit_keyword | (message: str[], keyword: str[]) | When a keyword hits |
 
-- room: One of the `room` object from original API
-- roomid: generated room ID, not from original API
-- user: One of the `user` from original API
+- room: One of the `room` object _from original API of SR_
+- roomid: _generated_ room ID, **not in** original API of SR
+- user: One of the `user` _from original API of SR_
 
 ### Other limitation
 - The name of method usually fixed. What this means is that there is only one method per event that will be hooked and evaluated in a class.
-- Handle exceptions properly. The parent does not handle any exception in plugins. If you raise an exception from your plugin, the parent would stop. There is no guarantee that the data coming from API has the corrrect structure; there may be no `key` in dict for example.
+- Please handle exceptions properly. The parent does not handle any exception in plugins. If you raise an exception from your plugin, the parent would stop. There is no guarantee that the data coming from API has the corrrect structure; there may be no `key` in dict for example.
+
+
+### Internals about plugin
+
+how it works
+
+1. import all .py files in the same path as `run_srpusher.py`, whose filename starts with `srpusher_plugin_`.
+1. Create all instances of classes name starts with `SRPusher_` on imported above.
+1. Add all instances created above to hooks of pluggy.
+1. On event, the hooked methods(decorated with @srphookimpl) of all classses and of all modules are executed in turns.
+
+**Q: Can I write some plugin that overrides the behavior of the parent or other plugin?**
+
+**A:** No. It might not be impssible under the Python language specification, but it surely shouldn't be done.
 
 
 ## uninstall
