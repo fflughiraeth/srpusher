@@ -7,6 +7,7 @@
     Output event log to console.
 """
 import logging
+import traceback
 import pluggy
 
 # use pluggy and make hookimpl
@@ -25,30 +26,48 @@ class SRPusher_Console(object):
     @srphookimpl
     def onlined_room(self, room: dict, roomid: str) -> None:
         """ Called when a new room is created """
-        logging.info("Room has appeared: '{}' created by '{}'".format(room["roomName"], room["creator"]["nickname"]))
+        try:
+            logging.info("Room has appeared: '{}' created by '{}'".format(room.get("roomName"), room["creator"].get("nickname")))
+        except Exception:
+            logging.error(traceback.format_exc())
 
     @srphookimpl
     def offlined_room(self, room: dict, roomid: str) -> None:
         """ Called when a room disappeared. The room object given is cached when it last existed. """
-        logging.info("Room has disappeared: '{}'".format(room.get("roomName")))
+        try:
+            logging.info("Room has disappeared: '{}'".format(room.get("roomName")))
+        except Exception:
+            logging.error(traceback.format_exc())
 
     @srphookimpl
     def onlined_user(self, user: dict, room: dict, roomid: str) -> None:
         """ Called when a new user appears. """
-        logging.info("User Onlined: '{}' to room '{}'({}/5)".format(user.get("nickname"), room.get("roomName"), len(room.get("members"))))
+        try:
+            logging.info("User Onlined: '{}' to room '{}'({}/5)".format(user.get("nickname"), room.get("roomName"), len(room.get("members"))))
+        except Exception:
+            logging.error(traceback.format_exc())
 
     @srphookimpl
     def offlined_user(self, user: dict, room: dict, roomid: str) -> None:
         """ Called when a user is no longer in any room (signed-out). The room and user objects given are cached they last existed. """
-        logging.info("User Offlined: '{}' from room '{}'({}/5)".format(user.get("nickname"), room.get("roomName"), len(room.get("members"))))
+        try:
+            logging.info("User Offlined: '{}' from room '{}'({}/5)".format(user.get("nickname"), room.get("roomName"), len(room.get("members"))))
+        except Exception:
+            logging.error(traceback.format_exc())
 
     @srphookimpl
     def option_room(self, room: dict, roomid: str) -> None:
         """ room alternatives """
-        logging.warn("(Option)Room: '{}'".format(room.get("roomName")))
+        try:
+            logging.warn("(Option)Room: '{}'".format(room.get("roomName")))
+        except Exception:
+            logging.error(traceback.format_exc())
 
     @srphookimpl
     def hit_keyword(self, messages: list, keyword: None) -> None:
         """ keyword hit """
-        for message in messages:
-            logging.info("(Hit Keyword) Message: {}".format(message))
+        try:
+            for message in messages:
+                logging.info("(Hit Keyword) Message: {}".format(message))
+        except Exception:
+            logging.error(traceback.format_exc())
