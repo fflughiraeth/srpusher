@@ -125,10 +125,10 @@ class SRPusher(Config):
         if self.pushover is None:
             logging.debug("PushOver has disabled or not configured.")
             return False
-        if not message:
+        if not message or not type(message) is str:
             return False
-        logging.info(f"(Send PushOver) {title}: {message}")
-        return self.pushover.send_message(message, title=title)
+        logging.debug(f"(Send PushOver) {title}: {message.strip()}")
+        return self.pushover.send_message(message.strip(), title=title)
 
 
     def get_users_diff(self, key1, key2) -> list:
