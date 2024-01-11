@@ -71,3 +71,10 @@ class SRPusher_Console(object):
                 logging.info("(Hit Keyword) Message: {}".format(message))
         except Exception:
             logging.error(traceback.format_exc())
+
+    @srphookimpl
+    def send_pushover(self, messages: list, keyword: None) -> None:
+        try:
+            logging.info(f"(Send PushOver) {title}: {message.strip()}")
+        except Exception:
+            logging.error(traceback.format_exc())
