@@ -128,6 +128,7 @@ class SRPusher(Config):
         if not message or not type(message) is str:
             return False
         logging.debug(f"(Send PushOver) {title}: {message.strip()}")
+        self.pm.hook.send_pushover(message=message.strip(), title=title)
         return self.pushover.send_message(message.strip(), title=title)
 
 
