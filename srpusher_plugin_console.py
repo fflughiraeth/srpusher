@@ -78,3 +78,10 @@ class SRPusher_Console(object):
             logging.info(f"(Send PushOver) {title}: {message.strip()}")
         except Exception:
             logging.error(traceback.format_exc())
+
+    @srphookimpl
+    def changed_user_status(self, user: dict, user_prev: dict) -> None:
+        try:
+            logging.debug("(userstatus) %s -> %s" % (str(user_prev), str(user)))
+        except Exception:
+            logging.error(traceback.format_exc())

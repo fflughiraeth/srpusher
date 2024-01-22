@@ -51,6 +51,7 @@ class SRPusher(Config):
     _previous_sr_status_epoch_private = 0
     _previous_sr_status = None
     _disable_plugins = False
+    _all_members = {}
 
 
     def __init__(self, dry_run=False, configfilename="settings.yml", pm=None) -> None:
@@ -119,6 +120,16 @@ class SRPusher(Config):
         """ skel """
         return None
 
+    def map_member_room(self, content: dict) -> None:
+        self._all_members = {}
+        try:
+            for room in content["rooms"]:
+                for member in room["members"]:
+                    prev = self._all_members.get(member["userId"])
+                    prev = prev if prev is not None else 0
+                    self._all_members[member["userId"]] = 1 + prev
+        except KeyError:
+            pass
 
     def send_notification(self, message: str, title: str) -> bool:
         """ Send notification via pushover """
@@ -156,12 +167,17 @@ class SRPusher(Config):
         self.redis.expire(key_dest, 60 * 60 * 24 * 7)
 
 
-    def set_user_cache(self, userid: str, status: object) -> None:
+    def set_user_cache(self, user: object, isonline=True) -> None:
         """ Cache user detail in redis.
             the information of user that go offline must be cached or it will be UNKNOWN (of course!)
         """
+        if type(user) is dict and user.get("userId"):
+            userid = user.get("userId")
+        else:
+            return
         key = self.header_usercache + userid.lower()
-        self.redis.set(key, json.dumps(status))
+        user["online"] = isonline
+        self.redis.set(key, json.dumps(user))
         self.redis.expire(key, 60 * 60)  # shorter is ok, at least it should remain until the next fetch.
 
 
@@ -170,6 +186,7 @@ class SRPusher(Config):
         key = self.header_roomcache + roomid
         self.redis.set(key, json.dumps(room_object))
         self.redis.expire(key, 60 * 60)
+
 
     def get_room_cache(self, roomid: str) -> object:
         """ Get room's detail cache from redis if exists (unreliable) """
@@ -192,12 +209,41 @@ class SRPusher(Config):
         return usercache
 
 
+    def check_user_diff(self, user: dict) -> None:
+        """ Compare user object against cache and evaluate hook if it has changed """
+        user_prev = None
+        if type(user) is dict and user.get("userId"):
+            userid = user.get("userId")
+            user_prev = self.get_user_cache(userid=userid)
+            if user_prev == {} or user_prev is None:
+                return
+        else:
+            # client under v1.5 or testroom
+            return
+
+        if self._all_members.get(userid) > 1:
+            room_dup = True
+            logging.debug("room dup: " + user.get("nickname"))
+        else:
+            room_dup = False
+        """ 1. nickname has changed
+            2. iconInfo has changed
+            3. roomid has changed but offline -> online (because it's normal) or one user has multiple logged in whether in different room or the same room(it's not normal but happens).
+        """
+        if user_prev.get("nickname") != user.get("nickname") or \
+           user_prev["iconInfo"] != user["iconInfo"] or \
+           (not (user_prev.get("online") is False and user.get("online") is True) and
+                room_dup is False and user_prev.get("roomid") != '' and user.get("roomid") != '' and user_prev.get("roomid") != user.get("roomid")):
+            self.pm.hook.changed_user_status(user=user, user_prev=user_prev)
+
+
     def generate_roomid(self, createTime: str, roomName: str, nsgmmemberid: str) -> str:
         """ Generate roomid from hash(timestamp+name+actionid) """
         if (not str(createTime) or not str(roomName) or not str(nsgmmemberid)) or (createTime == '' or roomName == '' or nsgmmemberid == ''):
             logging.error("generate_roomid: invalid parameters")
             raise ValueError("generate_roomid: invalid parameters")
-        return hashlib.sha256((str(createTime) + roomName + nsgmmemberid).encode('utf-8')).hexdigest()
+        # to preserve idempotence, no longer used nsgmmemberid.
+        return hashlib.sha256((str(createTime) + roomName).encode('utf-8')).hexdigest()
 
 
     def get_rooms_diff(self, key1, key2) -> list:
@@ -270,8 +316,10 @@ class SRPusher(Config):
             for m in room["members"]:
                 userid = m.get("userId")
                 m["roomid"] = roomid  # for user->room lookup
+                m["online"] = True
                 online_members.append(userid)
-                self.set_user_cache(userid, m)
+                self.check_user_diff(m)
+                self.set_user_cache(user=m, isonline=True)
         return online_members, alive_rooms
 
 
@@ -355,6 +403,7 @@ class SRPusher(Config):
         """ Check SR status and send notification if needed """
         content_option = self.sr_status_option
         content = self.sr_status
+        self.map_member_room(content=content)
 
         onlined_users, offlined_users, onlined_rooms, offlined_rooms, option_rooms = self.check_sr_status_diff(content, content_option=content_option)
         new_rooms_text = self.check_sr_status_members(content=content, onlined_users=onlined_users)
@@ -378,6 +427,7 @@ class SRPusher(Config):
                 roomid = self.get_user_cache(u).get("roomid")
                 room = self.get_room_cache(roomid)
                 self.pm.hook.offlined_user(user=self.get_user_cache(u).copy(), room=room, roomid=roomid)
+                self.set_user_cache(user=self.get_room_cache(u), isonline=False)
         for k, v in new_rooms_text.items():
             result = self.send_notification(v['detail'], title=v['room'])
             logging.info(str(result))
@@ -434,3 +484,7 @@ class SRPusher(Config):
     @srphookspec
     def hit_keyword(self, messages: list, keyword: None) -> None:
         """ call when hit keyword """
+
+    @srphookspec
+    def changed_user_status(self, user: dict, user_prev: dict) -> None:
+        """ call when user object has changed """
