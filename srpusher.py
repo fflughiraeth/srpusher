@@ -15,6 +15,7 @@ import pushover
 import hashlib
 import logging
 import pluggy
+import inspect
 from typing import Tuple
 
 srphookspec = pluggy.HookspecMarker("srpusher")
@@ -47,6 +48,9 @@ class SRPusher(Config):
     key_rooms = "rooms"
     key_rooms_option = "rooms_option"
     key_rooms_previous = "rooms_prev"
+    key_func_count = "_sr_function_counter"
+    key_func_count_previous = "_sr_function_counter_previous"
+    key_func_gauge = "_sr_function_gauge"
     _previous_sr_status_epoch = 0
     _previous_sr_status_epoch_private = 0
     _previous_sr_status = None
@@ -93,11 +97,19 @@ class SRPusher(Config):
         self.pushover = None
         logging.debug("PushOver has disabled.")
 
+    def function_counter(self, fname: str, count=1) -> int:
+        return self.redis.hincrby(self.key_func_count, fname, count)
+
+    def function_gauge(self, fname: str, value: float) -> int:
+        return self.redis.hset(self.key_func_gauge, fname, value)
+
     @property
     def sr_status(self) -> list:
         """ Get SR status from SR API """
+        self.function_counter(inspect.currentframe().f_code.co_name)
         min_wait_sec = 10
         if (self._previous_sr_status_epoch + min_wait_sec) > time.time():
+            self.function_counter(inspect.currentframe().f_code.co_name + ".requests.cache")
             return self._previous_sr_status
 
         http_headers = {
@@ -106,19 +118,27 @@ class SRPusher(Config):
         url = self.settings["sr"]["api_url"]
         if url.startswith("uggcf://"):
             url = codecs.decode(url, 'rot13')
+
+        time_response = time.time()
         response = requests.get(url, headers=http_headers)
+        time_response_delta = time.time() - time_response
+        self.function_gauge(inspect.currentframe().f_code.co_name + ".requests_http_response_time", time_response_delta)
+
         if response.status_code == requests.codes.ok:
             self._previous_sr_status_epoch = time.time()
             self._previous_sr_status = json.loads(response.text)
+            self.function_counter(inspect.currentframe().f_code.co_name + ".requests.ok")
             # self.pm.hook.update_sr_status(content=self._previous_sr_status)
         else:
             logging.error(f"(SR API) {response.status_code}: {response.text}")
+            self.function_counter(inspect.currentframe().f_code.co_name + ".requests.error")
+
         return self._previous_sr_status
 
     @property
     def sr_status_option(self) -> list:
-        """ skel """
-        return None
+        """ abstract """
+        return []
 
     def map_member_room(self, content: dict) -> None:
         self._all_members = {}
@@ -133,6 +153,7 @@ class SRPusher(Config):
 
     def send_notification(self, message: str, title: str) -> bool:
         """ Send notification via pushover """
+        self.function_counter(inspect.currentframe().f_code.co_name)
         if self.pushover is None:
             logging.debug("PushOver has disabled or not configured.")
             return False
@@ -140,16 +161,23 @@ class SRPusher(Config):
             return False
         logging.debug(f"(Send PushOver) {title}: {message.strip()}")
         self.pm.hook.send_pushover(message=message.strip(), title=title)
+        self.function_counter(inspect.currentframe().f_code.co_name + ".sent")
         return self.pushover.send_message(message.strip(), title=title)
 
+    def redis_touch(self, key: str, expire: int) -> None:
+        """ Set last touch time """
+        self.redis.set(key, time.time())
+        self.redis.expire(key, expire)
 
     def get_users_diff(self, key1, key2) -> list:
         """ Get offline<=>online of users diff from redis """
+        self.function_counter(inspect.currentframe().f_code.co_name)
         return list(self.redis.sdiff(key1, key2))
 
 
     def set_users_status(self, key, userids) -> None:
         """ Set users online status in redis """
+        self.function_counter(inspect.currentframe().f_code.co_name)
         self.redis.delete(key)
         for userid in userids:
             if str(userid) and userid != '':
@@ -171,6 +199,7 @@ class SRPusher(Config):
         """ Cache user detail in redis.
             the information of user that go offline must be cached or it will be UNKNOWN (of course!)
         """
+        self.function_counter(inspect.currentframe().f_code.co_name)
         if type(user) is dict and user.get("userId"):
             userid = user.get("userId")
         else:
@@ -183,6 +212,7 @@ class SRPusher(Config):
 
     def set_room_cache(self, roomid: str, room_object: object) -> None:
         """ Cache room detail in redis """
+        self.function_counter(inspect.currentframe().f_code.co_name)
         key = self.header_roomcache + roomid
         self.redis.set(key, json.dumps(room_object))
         self.redis.expire(key, 60 * 60)
@@ -190,6 +220,7 @@ class SRPusher(Config):
 
     def get_room_cache(self, roomid: str) -> object:
         """ Get room's detail cache from redis if exists (unreliable) """
+        self.function_counter(inspect.currentframe().f_code.co_name)
         if roomid is None:
             return {}
         key = self.header_roomcache + roomid
@@ -201,6 +232,7 @@ class SRPusher(Config):
 
     def get_user_cache(self, userid: str) -> object:
         """ Get user's detail cache from redis if exists (unreliable) """
+        self.function_counter(inspect.currentframe().f_code.co_name)
         key = self.header_usercache + userid.lower()
         try:
             usercache = json.loads(self.redis.get(key))
@@ -211,6 +243,7 @@ class SRPusher(Config):
 
     def check_user_diff(self, user: dict) -> None:
         """ Compare user object against cache and evaluate hook if it has changed """
+        self.function_counter(inspect.currentframe().f_code.co_name)
         user_prev = None
         if type(user) is dict and user.get("userId"):
             userid = user.get("userId")
@@ -221,7 +254,7 @@ class SRPusher(Config):
             # client under v1.5 or testroom
             return
 
-        if self._all_members.get(userid) > 1:
+        if self._all_members.get(userid) and self._all_members.get(userid) > 1:
             room_dup = True
             logging.debug("room dup: " + user.get("nickname"))
         else:
@@ -238,6 +271,7 @@ class SRPusher(Config):
 
 
     def generate_roomid(self, createTime: str, roomName: str, nsgmmemberid: str) -> str:
+        self.function_counter(inspect.currentframe().f_code.co_name)
         """ Generate roomid from hash(timestamp+name+actionid) """
         if (not str(createTime) or not str(roomName) or not str(nsgmmemberid)) or (createTime == '' or roomName == '' or nsgmmemberid == ''):
             logging.error("generate_roomid: invalid parameters")
@@ -252,6 +286,7 @@ class SRPusher(Config):
 
     def set_rooms_status(self, key, roomids) -> None:
         """ Set rooms alive in redis """
+        self.function_counter(inspect.currentframe().f_code.co_name)
         self.redis.delete(key)
         for roomid in roomids:
             if str(roomid) and roomid != '':
@@ -299,18 +334,21 @@ class SRPusher(Config):
         return False
 
 
-    def get_onlines(self, content: dict) -> Tuple[list, list]:
+    def get_onlines(self, content: dict) -> Tuple[list, list, int]:
         """
         Parse api content object, get online members and rooms.
         Side effect: Update user and room *cache in redis*.
         """
         online_members = []
         alive_rooms = []
+        private_rooms_count = 0
         for room in content["rooms"]:
             roomname = room.get("roomName")
             createTime = dateutil.parser.parse(room.get("createTime"))
             nsgmmemberid = room.get("creator").get("nsgmMemberId") or ''  # actionid
             roomid = self.generate_roomid(createTime, roomname, nsgmmemberid)
+            if room.get("needPasswd"):
+                private_rooms_count += 1
             alive_rooms.append(roomid)
             self.set_room_cache(roomid, room)
             for m in room["members"]:
@@ -320,14 +358,16 @@ class SRPusher(Config):
                 online_members.append(userid)
                 self.check_user_diff(m)
                 self.set_user_cache(user=m, isonline=True)
-        return online_members, alive_rooms
+        return online_members, alive_rooms, private_rooms_count
 
 
     def check_sr_status_diff(self, content: dict, content_option=None) -> Tuple[list, list, list, list, list]:
         # pass 1
-        online_members, alive_rooms = self.get_onlines(content)
+        online_members, alive_rooms, private_rooms_count = self.get_onlines(content)
+        self.redis_touch("last_fetch", 60 * 10)
         if content_option:
-            _, alive_rooms_option = self.get_onlines(content=content_option)
+            _, alive_rooms_option, private_rooms_count = self.get_onlines(content=content_option)
+            self.redis_touch("last_fetch_option", 60 * 10)
         else:
             _, alive_rooms_option = ([], [])
 
@@ -349,6 +389,13 @@ class SRPusher(Config):
             option_rooms = []
         onlined_rooms = self.get_rooms_diff(self.key_rooms, self.key_rooms_previous)
         self.flush_rooms_status(self.key_rooms, self.key_rooms_previous)
+
+        self.function_counter(inspect.currentframe().f_code.co_name + ".onlined_users", len(onlined_users))
+        self.function_counter(inspect.currentframe().f_code.co_name + ".offlined_users", len(offlined_users))
+        self.function_counter(inspect.currentframe().f_code.co_name + ".onlined_rooms", len(onlined_rooms))
+        self.function_counter(inspect.currentframe().f_code.co_name + ".offlined_rooms", len(offlined_rooms))
+        self.function_counter(inspect.currentframe().f_code.co_name + ".option_rooms", len(option_rooms))
+        self.function_gauge(inspect.currentframe().f_code.co_name + ".count_room_private", private_rooms_count)
 
         return onlined_users, offlined_users, onlined_rooms, offlined_rooms, option_rooms
 
@@ -404,6 +451,9 @@ class SRPusher(Config):
         content_option = self.sr_status_option
         content = self.sr_status
         self.map_member_room(content=content)
+        self.pm.hook.changed_count_user(count=len(self._all_members))
+        logging.info(f"{len(self._all_members)} membres are online")
+
 
         onlined_users, offlined_users, onlined_rooms, offlined_rooms, option_rooms = self.check_sr_status_diff(content, content_option=content_option)
         new_rooms_text = self.check_sr_status_members(content=content, onlined_users=onlined_users)
@@ -433,6 +483,15 @@ class SRPusher(Config):
             logging.info(str(result))
 
 
+    def redis_copy(self, key_dest: str, key_src: str) -> None:
+        """ copy data (redis < 6.0) """
+        if self.redis.exists(key_src):
+            ttl = self.redis.ttl(key_src)
+            self.redis.restore(key_dest, ttl=0, value=self.redis.dump(key_src), replace=True)
+            if ttl > 0:
+                self.redis.expire(key_dest, ttl)
+
+
     def run(self, runonce=False) -> None:
         """ default first runner """
         base_wait_sec = float(self.settings["sr"]["api_duration_sec"])
@@ -442,6 +501,17 @@ class SRPusher(Config):
                 return
             jitter = random.uniform(1 - float(self.settings["sr"]["api_duration_jitter"]), 1 + self.settings["sr"]["api_duration_jitter"])
             logging.info(f"{len(self.sr_status.get('rooms'))} rooms available. sleep {int(base_wait_sec * jitter)} sec")
+
+            # stats
+            self.pm.hook.changed_count_room(count=len(self.sr_status.get('rooms')))
+            self.function_gauge(inspect.currentframe().f_code.co_name + ".sleep_sec", (base_wait_sec * jitter))
+            self.pm.hook.py_function_count(counter=self.redis.hgetall(self.key_func_count), counter_prev=self.redis.hgetall(self.key_func_count_previous))
+            self.redis_copy(key_dest=self.key_func_count_previous, key_src=self.key_func_count)
+            self.redis.hset(self.key_func_count_previous, "run.previous_epoch", time.time())
+
+            self.pm.hook.py_function_gauge(gauge=self.redis.hgetall(self.key_func_gauge))
+            self.redis.delete(self.key_func_gauge)
+
             time.sleep(base_wait_sec * jitter)
 
 
@@ -488,3 +558,19 @@ class SRPusher(Config):
     @srphookspec
     def changed_user_status(self, user: dict, user_prev: dict) -> None:
         """ call when user object has changed """
+
+    @srphookspec
+    def changed_count_user(self, count: int) -> None:
+        """ count(user) """
+
+    @srphookspec
+    def changed_count_room(self, count: int) -> None:
+        """ count(room) """
+
+    @srphookspec
+    def py_function_count(self, counter: object, counter_prev: object) -> None:
+        """ stats cache """
+
+    @srphookspec
+    def py_function_gauge(self, gauge: object) -> None:
+        """ stats cache """
