@@ -7,6 +7,15 @@ sr:
     http_user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     api_duration_sec: 120
     api_duration_jitter: 0.2
+    api_duration_dynamic:
+      use: True  # duration = lpf(users * multiplier + intercept)
+      multiplier: -1.44
+      intercept: 200
+      min_wait_sec: 37  # duration += random.gauss(mu, sigma)
+      min_jitter_mu: 5
+      min_jitter_sigma: 10
+      min_wait_sec_absolute: 20  # duration = min_wait_sec_absolute if duration < min_wait_sec_absolute
+      lpf_t: .5  # smoothing T value for backward diff filter
     targets:
         - '0bda357b-408e-419b-ab19-1b36dc45ba25'
         - 'f32eb18f-2079-4931-a90a-5a778837cf88'

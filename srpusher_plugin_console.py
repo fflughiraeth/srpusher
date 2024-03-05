@@ -59,7 +59,7 @@ class SRPusher_Console(object):
     def option_room(self, room: dict, roomid: str) -> None:
         """ room alternatives """
         try:
-            logging.warn("(Option)Room: '{}'".format(room.get("roomName")))
+            logging.info("(Option)Room: '{}'".format(room.get("roomName")))
         except Exception:
             logging.error(traceback.format_exc())
 
@@ -80,7 +80,7 @@ class SRPusher_Console(object):
             logging.error(traceback.format_exc())
 
     @srphookimpl
-    def changed_user_status(self, user: dict, user_prev: dict) -> None:
+    def change_user_status(self, user: dict, user_prev: dict) -> None:
         try:
             logging.debug("(userstatus) %s -> %s" % (str(user_prev), str(user)))
         except Exception:

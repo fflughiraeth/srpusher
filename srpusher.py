@@ -160,7 +160,6 @@ class SRPusher(Config):
         if not message or not type(message) is str:
             return False
         logging.debug(f"(Send PushOver) {title}: {message.strip()}")
-        self.pm.hook.send_pushover(message=message.strip(), title=title)
         self.function_counter(inspect.currentframe().f_code.co_name + ".sent")
         return self.pushover.send_message(message.strip(), title=title)
 
@@ -241,7 +240,7 @@ class SRPusher(Config):
         return usercache
 
 
-    def check_user_diff(self, user: dict) -> None:
+    def check_user_diff(self, user: dict, room: dict) -> None:
         """ Compare user object against cache and evaluate hook if it has changed """
         self.function_counter(inspect.currentframe().f_code.co_name)
         user_prev = None
@@ -267,7 +266,7 @@ class SRPusher(Config):
            user_prev["iconInfo"] != user["iconInfo"] or \
            (not (user_prev.get("online") is False and user.get("online") is True) and
                 room_dup is False and user_prev.get("roomid") != '' and user.get("roomid") != '' and user_prev.get("roomid") != user.get("roomid")):
-            self.pm.hook.changed_user_status(user=user, user_prev=user_prev)
+            self.pm.hook.change_user_status(user=user, user_prev=user_prev, room=room)
 
 
     def generate_roomid(self, createTime: str, roomName: str, nsgmmemberid: str) -> str:
@@ -356,7 +355,7 @@ class SRPusher(Config):
                 m["roomid"] = roomid  # for user->room lookup
                 m["online"] = True
                 online_members.append(userid)
-                self.check_user_diff(m)
+                self.check_user_diff(user=m, room=room)  # check user diff. the room object is for optional information
                 self.set_user_cache(user=m, isonline=True)
         return online_members, alive_rooms, private_rooms_count
 
@@ -390,6 +389,7 @@ class SRPusher(Config):
         onlined_rooms = self.get_rooms_diff(self.key_rooms, self.key_rooms_previous)
         self.flush_rooms_status(self.key_rooms, self.key_rooms_previous)
 
+        # stats
         self.function_counter(inspect.currentframe().f_code.co_name + ".onlined_users", len(onlined_users))
         self.function_counter(inspect.currentframe().f_code.co_name + ".offlined_users", len(offlined_users))
         self.function_counter(inspect.currentframe().f_code.co_name + ".onlined_rooms", len(onlined_rooms))
@@ -451,9 +451,8 @@ class SRPusher(Config):
         content_option = self.sr_status_option
         content = self.sr_status
         self.map_member_room(content=content)
-        self.pm.hook.changed_count_user(count=len(self._all_members))
+        self.pm.hook.change_count_user(count=len(self._all_members))
         logging.info(f"{len(self._all_members)} membres are online")
-
 
         onlined_users, offlined_users, onlined_rooms, offlined_rooms, option_rooms = self.check_sr_status_diff(content, content_option=content_option)
         new_rooms_text = self.check_sr_status_members(content=content, onlined_users=onlined_users)
@@ -480,6 +479,9 @@ class SRPusher(Config):
                 self.set_user_cache(user=self.get_room_cache(u), isonline=False)
         for k, v in new_rooms_text.items():
             result = self.send_notification(v['detail'], title=v['room'])
+            if result:
+                room = self.get_room_cache(k)
+                self.pm.hook.send_pushover(message=v['detail'], title=v['room'], room=room, roomid=k)
             logging.info(str(result))
 
 
@@ -492,9 +494,43 @@ class SRPusher(Config):
                 self.redis.expire(key_dest, ttl)
 
 
+    def lpf(self, n0: float, n1: float, T=.5) -> float:
+        """ smoothing filter """
+        return (n0 + (n1 - n0) * (.1 / (1 / (2 * 3.1415 * T))))
+
+
+    def wait_sec(self, users: int) -> float:
+        """ dynamic wait seconds from count(user) """
+        multiplier = float(self.settings["sr"]["api_duration_dynamic"]["multiplier"]) or -1.44
+        intercept = float(self.settings["sr"]["api_duration_dynamic"]["intercept"]) or 200
+        min_wait_sec = float(self.settings["sr"]["api_duration_dynamic"]["min_wait_sec"]) or 37  # min + jitter
+        min_wait_sec_abs = float(self.settings["sr"]["api_duration_dynamic"]["min_wait_sec_absolute"]) or 20
+        # max_wait_sec = 60 * 3
+        jitter_sec = random.gauss(mu=5, sigma=10)
+
+        wait_sec = users * multiplier + intercept
+        wait_sec = wait_sec if wait_sec > min_wait_sec else min_wait_sec + jitter_sec  # add jitter if clamped below minimum seconds
+        wait_sec = wait_sec if wait_sec > min_wait_sec_abs else min_wait_sec_abs  # clamp absolute minimum
+        # wait_sec = wait_sec if wait_sec < max_wait_sec else max_wait_sec * jitter_sec
+        return wait_sec
+
+
+    @property
+    def previous_wait_sec(self) -> float:
+        try:
+            return float(self.redis.get("prev_wait_sec"))
+        except Exception:
+            return float(self.settings["sr"]["api_duration_sec"])
+
+    @previous_wait_sec.setter
+    def previous_wait_sec(self, value: float) -> None:
+        self.redis.set("prev_wait_sec", value)
+
+
     def run(self, runonce=False) -> None:
         """ default first runner """
         base_wait_sec = float(self.settings["sr"]["api_duration_sec"])
+        prev_wait_sec = base_wait_sec
         while True:
             self.check_sr_status()
             if runonce:
@@ -502,9 +538,17 @@ class SRPusher(Config):
             jitter = random.uniform(1 - float(self.settings["sr"]["api_duration_jitter"]), 1 + self.settings["sr"]["api_duration_jitter"])
             logging.info(f"{len(self.sr_status.get('rooms'))} rooms available. sleep {int(base_wait_sec * jitter)} sec")
 
+            prev_wait_sec = self.previous_wait_sec
+            wait_sec = self.wait_sec(len(self._all_members) * (60 / prev_wait_sec))  # normalize /min
+            wait_sec = self.lpf(prev_wait_sec, wait_sec)
+            prev_wait_sec = wait_sec
+            self.previous_wait_sec = wait_sec
+            logging.info("estimated_wait_sec: %d" % wait_sec)
+
             # stats
-            self.pm.hook.changed_count_room(count=len(self.sr_status.get('rooms')))
-            self.function_gauge(inspect.currentframe().f_code.co_name + ".sleep_sec", (base_wait_sec * jitter))
+            self.pm.hook.change_count_room(count=len(self.sr_status.get('rooms')))
+            self.function_gauge(inspect.currentframe().f_code.co_name + ".sleep_sec", wait_sec)
+            self.function_gauge(inspect.currentframe().f_code.co_name + ".estimated_sleep_sec", wait_sec)
             self.pm.hook.py_function_count(counter=self.redis.hgetall(self.key_func_count), counter_prev=self.redis.hgetall(self.key_func_count_previous))
             self.redis_copy(key_dest=self.key_func_count_previous, key_src=self.key_func_count)
             self.redis.hset(self.key_func_count_previous, "run.previous_epoch", time.time())
@@ -512,7 +556,8 @@ class SRPusher(Config):
             self.pm.hook.py_function_gauge(gauge=self.redis.hgetall(self.key_func_gauge))
             self.redis.delete(self.key_func_gauge)
 
-            time.sleep(base_wait_sec * jitter)
+            # time.sleep(base_wait_sec * jitter)
+            time.sleep(wait_sec)
 
 
     """ for plugin decorators and hooks """
@@ -548,7 +593,7 @@ class SRPusher(Config):
         """ call when status is updated """
 
     @srphookspec
-    def send_pushover(self, message: str, title: str) -> None:
+    def send_pushover(self, message: str, title: str, room: dict, roomid: str) -> None:
         """ call when send pushover """
 
     @srphookspec
@@ -556,15 +601,15 @@ class SRPusher(Config):
         """ call when hit keyword """
 
     @srphookspec
-    def changed_user_status(self, user: dict, user_prev: dict) -> None:
+    def change_user_status(self, user: dict, user_prev: dict, room: dict) -> None:
         """ call when user object has changed """
 
     @srphookspec
-    def changed_count_user(self, count: int) -> None:
+    def change_count_user(self, count: int) -> None:
         """ count(user) """
 
     @srphookspec
-    def changed_count_room(self, count: int) -> None:
+    def change_count_room(self, count: int) -> None:
         """ count(room) """
 
     @srphookspec

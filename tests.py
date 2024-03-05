@@ -177,6 +177,26 @@ eyJyb29tcyI6IFt7InJlYWxtIjogNCwgImluZGV4IjogMSwgInJvb21BdHRyaWJ1dGUiOiB7Imxhbmd1
         diff = self.s.get_users_diff(self.key_members_previous, self.key_members)
         self.assertEqual(len(diff), len(members))
 
+    def test_check_user_diff(self):
+        members = self.reload_test_users_list()
+
+    def test_wait_sec(self):
+        user_count_changes_list = [20, 50, 70, 120, 200, 300, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, ]
+        base_wait_sec = float(self.s.settings["sr"]["api_duration_sec"])
+        prev_wait_sec = base_wait_sec
+        self.assertAlmostEqual(base_wait_sec, 120)
+        for users in user_count_changes_list:
+            wait_sec = self.s.wait_sec(users)
+            wait_sec = self.s.lpf(prev_wait_sec, wait_sec)
+            self.assertGreater(wait_sec, 20)
+            if users > 500:
+                self.assertLess(wait_sec, 80)
+            prev_wait_sec = wait_sec
+
+    def test_lpf(self):
+        a = self.s.lpf(5, 1, T=.1)
+        self.assertLess(a, 5)
+        self.assertGreater(a, 1)
 
 if __name__ == "__main__":
     unittest.main()
