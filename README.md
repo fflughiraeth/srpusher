@@ -146,6 +146,11 @@ Events are listed in the table below.
 | offlined_user | (user: dict, room: dict, roomid: str) | When a user is no longer in any room (signed-out).<br />The room and user objects given are cached they last existed. |
 | send_pushover | (message: str, title: str) | When a pushover message has sent. |
 | hit_keyword | (message: str[], keyword: str[]) | When a keyword hits |
+| change_user_status | (user: dict, user_prev: dict, room: dict) | When a user status has changed. nickname, icon, etc. |
+| change_count_user | (count: int) | When count of users has changed. |
+| change_count_room | (count: int) | When count of rooms has changed. |
+| py_function_count | (counter: dict, counter_prev: dict) | Counter for performance statistics or debug. |
+| py_function_gauge | (gauge: dict) | Naive gauge for performance statistics or debug. |
 
 - room: One of the `room` object _from original API of SR_
 - roomid: _generated_ room ID, **not in** original API of SR
