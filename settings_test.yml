@@ -4,7 +4,7 @@ global:
 
 sr:
     api_url: 'uggcf://jroncv.flapebbz.nccfreivpr.lnznun.pbz/pbzz/choyvp/ebbz_yvfg?cntrfvmr=500&ernyz=4'
-    http_user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    http_user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
     api_duration_sec: 120
     api_duration_jitter: 0.2
     api_duration_dynamic:
@@ -12,8 +12,8 @@ sr:
       multiplier: -1.44
       intercept: 200
       min_wait_sec: 37  # duration += random.gauss(mu, sigma)
-      min_jitter_mu: 5
-      min_jitter_sigma: 10
+      jitter_mu: 5
+      jitter_sigma: 10
       min_wait_sec_absolute: 20  # duration = min_wait_sec_absolute if duration < min_wait_sec_absolute
       lpf_t: .5  # smoothing T value for backward diff filter
     targets:
