@@ -42,7 +42,7 @@ class SRPusher(Config):
     header_usercache = "__usercache__"
     header_keyword = "__keyword__"
     header_roomcache = "__roomcache__"
-    default_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+    default_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
     key_members = "members"
     key_members_previous = "members_prev"
     key_rooms = "rooms"
@@ -432,6 +432,8 @@ class SRPusher(Config):
                     header = "  + "  # online-ed now
                 elif userid in self.settings["sr"]["targets"]:
                     header = "  * "  # pinned
+                elif userid in self.settings["sr"]["targets_exclude"]:
+                    header = "  x "  # excluded
                 else:
                     header = "  - "  # normal
                 room_members += f"{header}{nickname}\n"
@@ -452,7 +454,7 @@ class SRPusher(Config):
         content = self.sr_status
         self.map_member_room(content=content)
         self.pm.hook.change_count_user(count=len(self._all_members))
-        logging.info(f"{len(self._all_members)} membres are online")
+        logging.info(f"{len(self.sr_status.get('rooms'))} rooms, {len(self._all_members)} membres are online.")
 
         onlined_users, offlined_users, onlined_rooms, offlined_rooms, option_rooms = self.check_sr_status_diff(content, content_option=content_option)
         new_rooms_text = self.check_sr_status_members(content=content, onlined_users=onlined_users)
@@ -499,20 +501,24 @@ class SRPusher(Config):
         return (n0 + (n1 - n0) * (.1 / (1 / (2 * 3.1415 * T))))
 
 
-    def wait_sec(self, users: int) -> float:
+    def dyn_wait_sec(self, users: int):
         """ dynamic wait seconds from count(user) """
-        multiplier = float(self.settings["sr"]["api_duration_dynamic"]["multiplier"]) or -1.44
-        intercept = float(self.settings["sr"]["api_duration_dynamic"]["intercept"]) or 200
-        min_wait_sec = float(self.settings["sr"]["api_duration_dynamic"]["min_wait_sec"]) or 37  # min + jitter
-        min_wait_sec_abs = float(self.settings["sr"]["api_duration_dynamic"]["min_wait_sec_absolute"]) or 20
+        multiplier = float(self.settings["sr"]["api_duration_dynamic"]["multiplier"])
+        intercept = float(self.settings["sr"]["api_duration_dynamic"]["intercept"])
+        min_wait_sec = float(self.settings["sr"]["api_duration_dynamic"]["min_wait_sec"])  # min + jitter
+        min_wait_sec_abs = float(self.settings["sr"]["api_duration_dynamic"]["min_wait_sec_absolute"])
+        jitter_mu = float(self.settings["sr"]["api_duration_dynamic"]["jitter_mu"])
+        jitter_sigma = float(self.settings["sr"]["api_duration_dynamic"]["jitter_sigma"])
         # max_wait_sec = 60 * 3
-        jitter_sec = random.gauss(mu=5, sigma=10)
-
+        jitter_sec = random.gauss(mu=jitter_mu, sigma=jitter_sigma)
         wait_sec = users * multiplier + intercept
-        wait_sec = wait_sec if wait_sec > min_wait_sec else min_wait_sec + jitter_sec  # add jitter if clamped below minimum seconds
-        wait_sec = wait_sec if wait_sec > min_wait_sec_abs else min_wait_sec_abs  # clamp absolute minimum
+        logging.debug("wait_sec %d = %d * %.2f + %d +(%d) " % (wait_sec, users, multiplier, intercept, jitter_sec))
+        # wait_sec = wait_sec if wait_sec > min_wait_sec else min_wait_sec + jitter_sec  # add jitter if clamped below minimum seconds
+        raw_sec = wait_sec if wait_sec > min_wait_sec_abs else min_wait_sec_abs  # just for stats, no jitter
+        wait_sec = wait_sec + jitter_sec  # add jitter if clamped below minimum seconds
+        wait_sec = wait_sec if wait_sec > min_wait_sec_abs else min_wait_sec_abs + jitter_sec  # clamp absolute minimum
         # wait_sec = wait_sec if wait_sec < max_wait_sec else max_wait_sec * jitter_sec
-        return wait_sec
+        return (wait_sec, jitter_sec, raw_sec)
 
 
     @property
@@ -536,19 +542,20 @@ class SRPusher(Config):
             if runonce:
                 return
             jitter = random.uniform(1 - float(self.settings["sr"]["api_duration_jitter"]), 1 + self.settings["sr"]["api_duration_jitter"])
-            logging.info(f"{len(self.sr_status.get('rooms'))} rooms available. sleep {int(base_wait_sec * jitter)} sec")
+            logging.debug(f"{len(self.sr_status.get('rooms'))} rooms available.")
 
             prev_wait_sec = self.previous_wait_sec
-            wait_sec = self.wait_sec(len(self._all_members) * (60 / prev_wait_sec))  # normalize /min
+            # (wait_sec, jitter_calc) = self.dyn_wait_sec(len(self._all_members) * (60 / prev_wait_sec))  # normalize /min
+            (wait_sec, jitter_calc, raw_sec) = self.dyn_wait_sec(len(self._all_members))
             wait_sec = self.lpf(prev_wait_sec, wait_sec)
             prev_wait_sec = wait_sec
             self.previous_wait_sec = wait_sec
-            logging.info("estimated_wait_sec: %d" % wait_sec)
+            logging.info("wait_sec: %d jitter(%d) exact:%d" % (wait_sec, jitter_calc, raw_sec))
 
             # stats
             self.pm.hook.change_count_room(count=len(self.sr_status.get('rooms')))
             self.function_gauge(inspect.currentframe().f_code.co_name + ".sleep_sec", wait_sec)
-            self.function_gauge(inspect.currentframe().f_code.co_name + ".estimated_sleep_sec", wait_sec)
+            self.function_gauge(inspect.currentframe().f_code.co_name + ".estimated_sleep_sec", raw_sec)
             self.pm.hook.py_function_count(counter=self.redis.hgetall(self.key_func_count), counter_prev=self.redis.hgetall(self.key_func_count_previous))
             self.redis_copy(key_dest=self.key_func_count_previous, key_src=self.key_func_count)
             self.redis.hset(self.key_func_count_previous, "run.previous_epoch", time.time())
@@ -560,7 +567,7 @@ class SRPusher(Config):
             time.sleep(wait_sec)
 
 
-    """ for plugin decorators and hooks """
+    """ format plugin decorators and hooks """
     @classmethod
     def plugin_register(cls, _class) -> None:
         classname = _class.__class__.__name__
